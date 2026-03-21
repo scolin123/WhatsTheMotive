@@ -23,34 +23,31 @@
       <div class="winner-card">
         <div class="winner-card__label">🎉 The move is...</div>
         <div class="winner-card__text">{{ results[0].text }}</div>
-        {% if results[0].participant_name %}
-          <div class="winner-card__credit">
-            suggested by {{ results[0].participant_name }}
-          </div>
-        {% endif %}
       </div>
     {% endif %}
 
-    {# ── Full ranked list ─────────────────────────────────────────── #}
+    {# ── Full ranked list — scores shown, no author attribution ───── #}
     <div class="panel">
-      <h2 class="panel-title">Full Rankings</h2>
+        <h2 class="panel-title">Full Rankings</h2>
 
-      <ol class="results-list">
-        {% for result in results %}
-          <li class="results-item{% if loop.first %} results-item--winner{% endif %}">
-            <span class="results-position">{{ result.position }}</span>
-            <span class="results-text">{{ result.text }}</span>
-            <div class="results-right">
-              <span class="results-score">{{ result.score }} pts</span>
-              {% if result.participant_name %}
-                <span class="results-author">{{ result.participant_name }}</span>
-              {% endif %}
-            </div>
-          </li>
-        {% else %}
-          <li class="participant-empty">No results yet.</li>
-        {% endfor %}
-      </ol>
+        <ol class="results-list">
+            {% for result in results %}
+            <li class="results-item{% if loop.first %} results-item--winner{% endif %}">
+                <span class="results-position">{{ result.position }}</span>
+                <span class="results-text">{{ result.text }}</span>
+                <div class="results-right">
+                <span class="results-score">{{ result.score }} pts</span>
+
+                {# Only show name if the room is NOT set to anonymous #}
+                {% if not room.results_anonymous %}
+                    <span class="results-author">Suggested by {{ result.participant_name }}</span>
+                {% endif %}
+                </div>
+            </li>
+            {% else %}
+            <li class="participant-empty">No results yet.</li>
+            {% endfor %}
+        </ol>
     </div>
 
     {# ── Play again ───────────────────────────────────────────────── #}

@@ -71,6 +71,7 @@ def create_room_submit():
     title                = request.form.get("title", "").strip()
     max_participants_raw = request.form.get("max_participants", "").strip()
     spp_raw              = request.form.get("suggestions_per_person", "").strip()
+    res_anon = request.form.get("results_anonymous") == "on"
 
     errors = []
     if not host_name:
@@ -107,6 +108,7 @@ def create_room_submit():
             title=title,
             max_participants=max_participants,
             suggestions_per_person=suggestions_per_person,
+            results_anonymous=res_anon
         )
     except (ValueError, RuntimeError) as e:
         flash(str(e), "error")
@@ -474,14 +476,17 @@ def api_participants(code: str):
     if not room:
         return jsonify({"error": "Room not found."}), 404
 
-    participants  = get_participants(room["id"])
-    voters        = get_voters(room["id"]) if room["phase"] == "voting" else []
+    # AFTER
+    participants    = get_participants(room["id"])
+    voters          = get_voters(room["id"]) if room["phase"] == "voting" else []
+    all_suggestions = get_suggestions(room["id"]) if room["phase"] == "suggesting" else []
 
     return jsonify({
         "phase":              room["phase"],
         "participants":       participants,
         "voters_count":       len(voters),
         "participants_count": len(participants),
+        "all_suggestions":    all_suggestions,
     })
 
 

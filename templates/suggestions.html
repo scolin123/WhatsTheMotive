@@ -4,7 +4,6 @@
 
 {% block content %}
 
-{# Data island — Jinja values available to JS without polluting the script block #}
 <script id="page-data" type="application/json">
   {
     "roomCode":       {{ room.room_code | tojson }},
@@ -14,7 +13,7 @@
 
 <div class="page-wrapper page-wrapper--lobby">
 
-  {# ── Room header — identical structure to lobby ───────────────── #}
+  {# ── Room header ───────────────────────────────────────────────── #}
   <div class="lobby-header">
     <div class="lobby-header__meta">
       <span class="phase-badge phase-badge--suggesting">suggesting</span>
@@ -29,7 +28,7 @@
     </div>
   </div>
 
-  {# ── Stats row — identical structure to lobby ─────────────────── #}
+  {# ── Stats row ─────────────────────────────────────────────────── #}
   <div class="lobby-stats">
     <div class="stat-card">
       <span class="stat-card__value">{{ slots_used }}</span>
@@ -41,7 +40,7 @@
     </div>
   </div>
 
-  {# ── Suggestion form ──────────────────────────────────────────── #}
+  {# ── Suggestion form ───────────────────────────────────────────── #}
   <div class="participants-card">
     <h3 class="participants-card__heading">
       Your Suggestions
@@ -58,7 +57,6 @@
       {% endif %}
     {% endwith %}
 
-    {# Show form only if the user still has slots remaining #}
     {% if slots_remaining > 0 %}
       <form
         class="form suggestion-form"
@@ -66,9 +64,7 @@
         action="{{ url_for('suggestions_submit', code=room.room_code) }}"
       >
         <div class="form__group">
-          <label class="form__label" for="suggestion_text">
-            Add a suggestion
-          </label>
+          <label class="form__label" for="suggestion_text">Add a suggestion</label>
           <div class="suggestion-input-row">
             <input
               class="form__input"
@@ -91,7 +87,6 @@
       </div>
     {% endif %}
 
-    {# List of this user's submitted suggestions #}
     {% if my_suggestions %}
       <ul class="participants-list suggestion-list">
         {% for s in my_suggestions %}
@@ -105,26 +100,30 @@
 
   </div>
 
-  {# ── All suggestions so far (visible to everyone) ─────────────── #}
-  {% if all_suggestions %}
-    <div class="participants-card">
-      <h3 class="participants-card__heading">
-        All Suggestions
-        <span class="participants-card__count">{{ all_suggestions | length }}</span>
-      </h3>
-      <ul class="participants-list suggestion-list">
-        {% for s in all_suggestions %}
-          <li class="participants-list__item">
-            <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
-            <span class="participant-name">{{ s.text }}</span>
-            <span class="suggestion-author">{{ s.participant_name }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-  {% endif %}
+  {# ── All suggestions — IDs added for JS polling ────────────────── #}
+  <div class="participants-card">
+    <h3 class="participants-card__heading">
+      All Suggestions
+      {# id="all-suggestions-count" so JS can update the count badge #}
+      <span class="participants-card__count" id="all-suggestions-count">
+        {{ all_suggestions | length }}
+      </span>
+    </h3>
 
-  {# ── Host-only: advance to voting ─────────────────────────────── #}
+    {# id="all-suggestions-list" so JS can rebuild this list every 3 s #}
+    <ul class="participants-list suggestion-list" id="all-suggestions-list">
+      {% for s in all_suggestions %}
+        <li class="participants-list__item">
+          <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+          <span class="participant-name">{{ s.text }}</span>
+        </li>
+      {% else %}
+        <li class="participant-empty">No suggestions yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {# ── Host controls / guest waiting ─────────────────────────────── #}
   {% if is_host %}
     <div class="lobby-footer">
       <div class="host-controls">
@@ -150,9 +149,11 @@
 </div>
 
 <script>
-  const PAGE_DATA     = JSON.parse(document.getElementById('page-data').textContent);
-  const ROOM_CODE     = PAGE_DATA.roomCode;
+  const PAGE_DATA = JSON.parse(document.getElementById('page-data').textContent);
+  const ROOM_CODE = PAGE_DATA.roomCode;
+  const POLL_MS   = 3000;
 
+  // ── Copy room code ───────────────────────────────────────────────
   function copyCode() {
     if (!navigator.clipboard) return;
     navigator.clipboard.writeText(ROOM_CODE).then(() => {
@@ -166,5 +167,67 @@
       }, 1500);
     }).catch(() => {});
   }
+
+  // ── Poll /api/room/<code>/participants every 3 s ─────────────────
+  //
+  //  Response shape (after app.py update):
+  //    {
+  //      "phase":           "suggesting",
+  //      "all_suggestions": [ { "participant_name": "Alex", "text": "Inception" }, ... ],
+  //      ...
+  //    }
+  //
+  //  - Rebuilds the all-suggestions list for everyone in real time
+  //  - Redirects to voting page if the host starts voting
+  //
+  async function refreshSuggestions() {
+    let data;
+    try {
+      const resp = await fetch(`/api/room/${ROOM_CODE}/participants`);
+      if (!resp.ok) return;
+      data = await resp.json();
+    } catch (err) {
+      console.warn('[WTM] Suggestion poll failed:', err);
+      return;
+    }
+
+    // Redirect guests when host starts voting
+    if (data.phase && data.phase === 'voting') {
+      window.location.href = `/room/${ROOM_CODE}/voting`;
+      return;
+    }
+
+    // Guard: only update the list if we got a valid array back
+    if (!Array.isArray(data.all_suggestions)) return;
+
+    const list     = document.getElementById('all-suggestions-list');
+    const countEl  = document.getElementById('all-suggestions-count');
+    if (!list) return;
+
+    // Rebuild the list
+    if (data.all_suggestions.length === 0) {
+      list.innerHTML = '<li class="participant-empty">No suggestions yet.</li>';
+    } else {
+      list.innerHTML = data.all_suggestions.map(s => {
+        const initial  = (s.participant_name || '?').charAt(0).toUpperCase();
+        // Escape HTML to prevent XSS from user-submitted text
+        const safeText = (s.text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        return `
+          <li class="participants-list__item">
+            <span class="participant-avatar">${initial}</span>
+            <span class="participant-name">${safeText}</span>
+          </li>`;
+      }).join('');
+    }
+
+    // Keep the count badge in sync
+    if (countEl) countEl.textContent = data.all_suggestions.length;
+  }
+
+  setInterval(refreshSuggestions, POLL_MS);
 </script>
 {% endblock %}

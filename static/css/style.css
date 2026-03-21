@@ -1152,3 +1152,20 @@ body {
   .winner-card__text { font-size: 1.6rem; }
   .rank-author       { display: none; }
 }
+
+/* whatsthemove/static/css/style.css */
+
+.sortable-ghost {
+    opacity: 0.4;
+    background: var(--bg-card-alt) !important;
+    border: 2px dashed var(--accent) !important;
+}
+
+.rank-item {
+    cursor: grab;
+    transition: transform 0.1s ease;
+}
+
+.rank-item:active {
+    cursor: grabbing;
+}
