@@ -31,6 +31,8 @@ from services.voting_service import (
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
+app.config["SESSION_COOKIE_SECURE"] = True
 
 
 # ---------------------------------------------------------------------------
