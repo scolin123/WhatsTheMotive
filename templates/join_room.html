@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Join a Room — WTM{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+  <div class="card">
+
+    <div class="card__header">
+      <a href="{{ url_for('home') }}" class="back-link">← back</a>
+      <h2 class="card__title">Join a Room</h2>
+      <p class="card__subtitle">Got a code? You're almost in.</p>
+    </div>
+
+    {# Flash messages — shown when code is wrong, room is full, name is taken, etc. #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {#
+      prefill_code is set by the route when someone arrives via a shareable link:
+        /join?code=ABC123
+      Both prefill_code and form_data are optional — guarded with | default.
+    #}
+    <form class="form" method="POST" action="{{ url_for('join_room_submit') }}">
+
+      <div class="form__group">
+        <label class="form__label" for="room_code">Room Code</label>
+        <input
+          class="form__input form__input--code"
+          type="text"
+          id="room_code"
+          name="room_code"
+          placeholder="e.g. A3BX92"
+          value="{{ prefill_code | default('') or (form_data | default({})).get('room_code', '') }}"
+          maxlength="6"
+          required
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        >
+      </div>
+
+      <div class="form__group">
+        <label class="form__label" for="display_name">Your Name</label>
+        <input
+          class="form__input"
+          type="text"
+          id="display_name"
+          name="display_name"
+          placeholder="e.g. Jordan"
+          value="{{ (form_data | default({})).get('display_name', '') }}"
+          required
+          autocomplete="off"
+        >
+      </div>
+
+      <button class="btn btn--primary btn--full" type="submit">
+        Join Room →
+      </button>
+
+    </form>
+
+    <p class="card__footer-note">
+      Don't have a code?
+      <a href="{{ url_for('create_room_page') }}">Create your own room</a>
+    </p>
+
+  </div>
+</div>
+
+<script>
+  // Auto-uppercase the room code as the user types so they
+  // never have to worry about capitalisation.
+  const codeInput = document.getElementById('room_code');
+  codeInput.addEventListener('input', () => {
+    const pos = codeInput.selectionStart;
+    codeInput.value = codeInput.value.toUpperCase();
+    codeInput.setSelectionRange(pos, pos);
+  });
+</script>
+{% endblock %}

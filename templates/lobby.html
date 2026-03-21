@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block content %}
+{# room, participants, and is_host are always provided by the lobby() route.   #}
+{# No {% set %} redeclarations needed — they cause a VS Code JS linter error.  #}
+
+{#
+  Data island — Jinja values live here, not inside the <script> block.
+  type="application/json" means the JS linter never tries to parse it.
+#}
+<script id="page-data" type="application/json">
+  {
+    "roomCode": {{ room.room_code | tojson }},
+    "hostName": {{ room.host_name | tojson }}
+  }
+</script>
+
+<section class="page page--lobby">
+  <div class="container">
+    <div class="lobby-hero">
+      <div class="lobby-hero__text">
+        <p class="eyebrow">Room Lobby</p>
+        <h1 class="lobby-title">{{ room.title }}</h1>
+        <p class="lobby-subtitle">
+          Waiting for everyone to join before suggestions begin.
+        </p>
+      </div>
+      <div class="phase-pill">
+        {{ room.phase | capitalize }}
+      </div>
+    </div>
+
+    <div class="lobby-layout">
+      <div class="panel">
+        <h2 class="panel-title">Room Info</h2>
+
+        <div class="info-list">
+          <div class="info-item info-item--code">
+            <span class="info-label">Room Code</span>
+            <div class="room-code-row">
+              <span class="room-code">{{ room.room_code }}</span>
+              <button id="copy-code-btn" type="button" class="btn btn--secondary" onclick="copyCode()">
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Host</span>
+            <span class="info-value">{{ room.host_name }}</span>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Participants</span>
+            <span class="info-value">
+              <span id="participant-count">{{ participants | length }}</span> / {{ room.max_participants }}
+            </span>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Suggestions Each</span>
+            <span class="info-value">{{ room.suggestions_per_person }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel-title">Joined Participants</h2>
+
+        <ul id="participants-list" class="participants-list">
+          {% for participant in participants %}
+            <li class="participant-item">
+              <span class="participant-avatar">
+                {{ participant.display_name[0] | upper }}
+              </span>
+              <span class="participant-name">{{ participant.display_name }}</span>
+            </li>
+          {% else %}
+            <li class="participant-empty">No one has joined yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    <div class="lobby-action">
+      {% if is_host %}
+        <div class="action-card">
+          <p class="action-text">
+            You are the host. Once everyone has joined, you'll be able to start the suggestions phase.
+          </p>
+          {#
+            POST form — prevents accidental re-trigger on page refresh.
+            The start_suggestions route advances phase to 'suggesting'
+            then redirects the host to the suggestions page.
+          #}
+          <form method="POST" action="{{ url_for('start_suggestions', code=room.room_code) }}">
+            <button type="submit" class="btn btn--primary" id="start-btn">
+              Start Suggestions
+            </button>
+          </form>
+        </div>
+      {% else %}
+        <div class="action-card">
+          <p class="action-text">
+            Waiting for <strong>{{ room.host_name }}</strong> to start the next phase.
+          </p>
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+
+<script>
+  // ── Read server-rendered values from the data island ────────────
+  // No Jinja here — keeps the VS Code JS linter happy.
+  const PAGE_DATA = JSON.parse(document.getElementById('page-data').textContent);
+  const ROOM_CODE = PAGE_DATA.roomCode;
+  const HOST_NAME = PAGE_DATA.hostName;
+  const POLL_MS   = 3000;
+
+  // ── Copy room code to clipboard ──────────────────────────────────
+  function copyCode() {
+    if (!navigator.clipboard || !ROOM_CODE) return;
+    navigator.clipboard.writeText(ROOM_CODE).then(() => {
+      const btn = document.getElementById('copy-code-btn');
+      if (!btn) return;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+    }).catch(() => {});
+  }
+
+  // ── Poll /api/room/<code>/participants ───────────────────────────
+  //
+  //  Response shape: { "phase": "lobby", "participants": [...] }
+  //
+  //  - Updates the participant list and count for everyone
+  //  - Guests auto-redirect to /suggestions when phase leaves 'lobby'
+  //    (host is already redirected server-side by start_suggestions)
+  //
+  async function refreshParticipants() {
+    if (!ROOM_CODE) return;
+    let data;
+    try {
+      const resp = await fetch(`/api/room/${ROOM_CODE}/participants`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!resp.ok) return;
+      data = await resp.json();
+    } catch (err) {
+      console.warn('[WTM] Polling error:', err);
+      return;
+    }
+
+    if (!data || !Array.isArray(data.participants)) return;
+
+    // Guest auto-redirect — triggers when host clicks Start Suggestions
+    if (data.phase && data.phase !== 'lobby') {
+      window.location.href = `/room/${ROOM_CODE}/suggestions`;
+      return;
+    }
+
+    // Rebuild participant list
+    const list  = document.getElementById('participants-list');
+    const count = document.getElementById('participant-count');
+    if (!list || !count) return;
+
+    count.textContent = String(data.participants.length);
+
+    if (data.participants.length === 0) {
+      list.innerHTML = '<li class="participant-empty">No one has joined yet.</li>';
+      return;
+    }
+
+    list.innerHTML = data.participants.map(p => {
+      const name    = p.display_name || 'Unknown';
+      const initial = name.charAt(0).toUpperCase();
+      return `
+        <li class="participant-item">
+          <span class="participant-avatar">${initial}</span>
+          <span class="participant-name">${name}</span>
+        </li>`;
+    }).join('');
+  }
+
+  setInterval(refreshParticipants, POLL_MS);
+</script>
+{% endblock %}

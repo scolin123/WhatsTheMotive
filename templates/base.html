@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}What's The Move?{% endblock %}</title>
+
+  <!--
+    Fonts loaded here (not via CSS @import) so they are guaranteed
+    to be requested before the stylesheet is parsed.
+    CSS @import after any rule is invalid and silently ignored.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <nav class="site-nav">
+    <a href="{{ url_for('home') }}" class="site-nav__brand">✦ WTM</a>
+  </nav>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+</body>
+</html>

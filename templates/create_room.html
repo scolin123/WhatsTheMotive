@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Create a Room — WTM{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+  <div class="card">
+
+    <div class="card__header">
+      <a href="{{ url_for('home') }}" class="back-link">← back</a>
+      <h2 class="card__title">Create a Room</h2>
+      <p class="card__subtitle">Set it up. Share the code. Let the voting begin.</p>
+    </div>
+
+    {# Flash messages — shown on validation failure or server error #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {#
+      Action points to create_room_submit (POST handler).
+      form_data is passed back by the route on validation failure
+      so the user does not have to retype their input.
+      The `| default({})` guard prevents a crash if form_data is not passed.
+    #}
+    <form class="form" method="POST" action="{{ url_for('create_room_submit') }}">
+
+      <div class="form__group">
+        <label class="form__label" for="host_name">Your Name</label>
+        <input
+          class="form__input"
+          type="text"
+          id="host_name"
+          name="host_name"
+          placeholder="e.g. Alex"
+          value="{{ (form_data | default({})).get('host_name', '') }}"
+          required
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="form__group">
+        <label class="form__label" for="title">Room Title</label>
+        <input
+          class="form__input"
+          type="text"
+          id="title"
+          name="title"
+          placeholder="e.g. Friday night plans 🎉"
+          value="{{ (form_data | default({})).get('title', '') }}"
+          required
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="form__row">
+        <div class="form__group">
+          <label class="form__label" for="max_participants">Max Participants</label>
+          <input
+            class="form__input"
+            type="number"
+            id="max_participants"
+            name="max_participants"
+            placeholder="e.g. 8"
+            value="{{ (form_data | default({})).get('max_participants', '') }}"
+            min="2"
+            max="50"
+            required
+          >
+          <span class="form__hint">min. 2</span>
+        </div>
+
+        <div class="form__group">
+          <label class="form__label" for="suggestions_per_person">Suggestions Per Person</label>
+          <input
+            class="form__input"
+            type="number"
+            id="suggestions_per_person"
+            name="suggestions_per_person"
+            placeholder="e.g. 3"
+            value="{{ (form_data | default({})).get('suggestions_per_person', '') }}"
+            min="1"
+            max="10"
+            required
+          >
+          <span class="form__hint">min. 1</span>
+        </div>
+      </div>
+
+      <button class="btn btn--primary btn--full" type="submit">
+        <span class="btn__icon">✦</span> Create Room
+      </button>
+
+    </form>
+  </div>
+</div>
+{% endblock %}

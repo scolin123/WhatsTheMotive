@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}What's The Move?{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <div class="hero__badge">✦ decide together</div>
+
+  <h1 class="hero__title">
+    What's<br>The Move?
+  </h1>
+
+  <p class="hero__tagline">
+    Stop the endless group chat debate.<br>
+    Create a room, vote on options, get moving.
+  </p>
+
+  <div class="hero__actions">
+    <a href="{{ url_for('create_room_page') }}" class="btn btn--primary">
+      <span class="btn__icon">✦</span> Create a Room
+    </a>
+    <a href="{{ url_for('join_room_page') }}" class="btn btn--secondary">
+      Join a Room
+    </a>
+  </div>
+
+  <div class="hero__categories">
+    <div class="category-pill">🍜 food</div>
+    <div class="category-pill">🎬 movies</div>
+    <div class="category-pill">🎉 activities</div>
+  </div>
+</div>
+{% endblock %}

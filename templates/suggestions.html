@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Suggestions — {{ room.title }} — WTM{% endblock %}
+
+{% block content %}
+
+{# Data island — Jinja values available to JS without polluting the script block #}
+<script id="page-data" type="application/json">
+  {
+    "roomCode":       {{ room.room_code | tojson }},
+    "slotsRemaining": {{ slots_remaining | tojson }}
+  }
+</script>
+
+<div class="page-wrapper page-wrapper--lobby">
+
+  {# ── Room header — identical structure to lobby ───────────────── #}
+  <div class="lobby-header">
+    <div class="lobby-header__meta">
+      <span class="phase-badge phase-badge--suggesting">suggesting</span>
+      <span class="lobby-header__host">hosted by {{ room.host_name }}</span>
+    </div>
+    <h2 class="lobby-header__title">{{ room.title }}</h2>
+
+    <div class="room-code-display">
+      <span class="room-code-display__label">room code</span>
+      <span class="room-code-display__code">{{ room.room_code }}</span>
+      <button class="copy-btn" onclick="copyCode()" title="Copy room code">⧉</button>
+    </div>
+  </div>
+
+  {# ── Stats row — identical structure to lobby ─────────────────── #}
+  <div class="lobby-stats">
+    <div class="stat-card">
+      <span class="stat-card__value">{{ slots_used }}</span>
+      <span class="stat-card__label">of {{ slots_total }} submitted</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__value" id="slots-remaining">{{ slots_remaining }}</span>
+      <span class="stat-card__label">suggestion{{ 's' if slots_remaining != 1 else '' }} left</span>
+    </div>
+  </div>
+
+  {# ── Suggestion form ──────────────────────────────────────────── #}
+  <div class="participants-card">
+    <h3 class="participants-card__heading">
+      Your Suggestions
+      <span class="participants-card__count">{{ display_name }}</span>
+    </h3>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages" style="margin-bottom: 1rem;">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {# Show form only if the user still has slots remaining #}
+    {% if slots_remaining > 0 %}
+      <form
+        class="form suggestion-form"
+        method="POST"
+        action="{{ url_for('suggestions_submit', code=room.room_code) }}"
+      >
+        <div class="form__group">
+          <label class="form__label" for="suggestion_text">
+            Add a suggestion
+          </label>
+          <div class="suggestion-input-row">
+            <input
+              class="form__input"
+              type="text"
+              id="suggestion_text"
+              name="suggestion_text"
+              placeholder="e.g. Inception, Sushi Palace, Mini Golf…"
+              required
+              autocomplete="off"
+              maxlength="120"
+            >
+            <button class="btn btn--primary" type="submit">Add</button>
+          </div>
+        </div>
+      </form>
+    {% else %}
+      <div class="suggestions-done-banner">
+        <span>✦</span>
+        <p>You've submitted all your suggestions!</p>
+      </div>
+    {% endif %}
+
+    {# List of this user's submitted suggestions #}
+    {% if my_suggestions %}
+      <ul class="participants-list suggestion-list">
+        {% for s in my_suggestions %}
+          <li class="participants-list__item">
+            <span class="suggestion-index">{{ loop.index }}</span>
+            <span class="participant-name">{{ s.text }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+  </div>
+
+  {# ── All suggestions so far (visible to everyone) ─────────────── #}
+  {% if all_suggestions %}
+    <div class="participants-card">
+      <h3 class="participants-card__heading">
+        All Suggestions
+        <span class="participants-card__count">{{ all_suggestions | length }}</span>
+      </h3>
+      <ul class="participants-list suggestion-list">
+        {% for s in all_suggestions %}
+          <li class="participants-list__item">
+            <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+            <span class="participant-name">{{ s.text }}</span>
+            <span class="suggestion-author">{{ s.participant_name }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {# ── Host-only: advance to voting ─────────────────────────────── #}
+  {% if is_host %}
+    <div class="lobby-footer">
+      <div class="host-controls">
+        <p class="host-controls__hint">
+          When everyone has submitted, close suggestions and move to voting.
+        </p>
+        <form method="POST" action="{{ url_for('start_voting', code=room.room_code) }}">
+          <button class="btn btn--primary btn--full" type="submit">
+            <span class="btn__icon">▶</span> Close Suggestions &amp; Start Voting
+          </button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <div class="lobby-footer">
+      <div class="waiting-message">
+        <div class="waiting-message__spinner"></div>
+        <p>Waiting for <strong>{{ room.host_name }}</strong> to open voting&hellip;</p>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+  const PAGE_DATA     = JSON.parse(document.getElementById('page-data').textContent);
+  const ROOM_CODE     = PAGE_DATA.roomCode;
+
+  function copyCode() {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(ROOM_CODE).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      if (!btn) return;
+      btn.textContent = '✓';
+      btn.classList.add('copy-btn--copied');
+      setTimeout(() => {
+        btn.textContent = '⧉';
+        btn.classList.remove('copy-btn--copied');
+      }, 1500);
+    }).catch(() => {});
+  }
+</script>
+{% endblock %}
