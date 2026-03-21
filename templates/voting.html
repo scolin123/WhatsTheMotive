@@ -1,285 +1,104 @@
 {% extends "base.html" %}
 
-{% block title %}Vote — {{ room.title }} — WTM{% endblock %}
-
 {% block content %}
-<script id="page-data" type="application/json">
-  {
-    "roomCode": {{ room.room_code | tojson }},
-    "suggestions": {{ suggestions | tojson }}
-  }
-</script>
+{% set room = room or {} %}
+{% set suggestions = suggestions or [] %}
+{% set voters_count = voters_count or 0 %}
+{% set participants_count = participants_count or 0 %}
+{% set progress_pct = progress_pct or 0 %}
 
-<section class="page page--lobby">
+<section class="page page--voting">
   <div class="container">
-
-    {# ── Header ──────────────────────────────────────────────────── #}
-    <div class="lobby-hero">
-      <div class="lobby-hero__text">
-        <p class="eyebrow">Voting Phase</p>
-        <h1 class="lobby-title">{{ room.title }}</h1>
-        <p class="lobby-subtitle">
-          Drag to rank your favourites. #1 is your top pick.
+    <div class="voting-hero">
+      <div>
+        <p class="eyebrow">Ranking Phase</p>
+        <h1 class="page-title">{{ room.get('title', 'Vote') }}</h1>
+        <p class="page-subtitle">
+          Drag the suggestions into your preferred order, from best to worst.
         </p>
       </div>
-      <div class="phase-pill phase-pill--voting">Voting</div>
+
+      <div class="phase-pill">
+        {{ room.get('phase', 'voting')|capitalize }}
+      </div>
     </div>
 
-    {# ── Progress bar ─────────────────────────────────────────────── #}
-    <div class="vote-progress">
-      <div class="vote-progress__labels">
-        <span>Votes submitted</span>
-        <span>
-          <span id="voters-count">{{ voters_count }}</span>
-          / {{ participants_count }}
-        </span>
+    <div class="panel voting-status">
+      <div class="status-row">
+        <div>
+          <h2 class="panel-title">Voting Progress</h2>
+          <p class="muted">
+            <span id="voters-count">{{ voters_count }}</span> of {{ participants_count }} participant(s) submitted rankings
+          </p>
+        </div>
+
+        <div class="status-chip">
+          Room Code: <strong>{{ room.get('room_code', '------') }}</strong>
+        </div>
       </div>
-      <div class="vote-progress__bar">
+
+      <div class="progress-bar">
         <div
-            class="vote-progress__fill"
-            id="progress-fill"
-            data-pct="{{ (voters_count / participants_count * 100) | round | int }}"
+        id="progress-fill"
+        class="progress-fill"
+        data-pct="{{ progress_pct }}"
         ></div>
       </div>
     </div>
 
-    {# ── Flash messages ───────────────────────────────────────────── #}
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flash-messages" style="margin-bottom: 1rem;">
-          {% for category, message in messages %}
-            <div class="flash flash--{{ category }}">{{ message }}</div>
-          {% endfor %}
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Rank the Suggestions</h2>
+          <p class="muted">Top = favorite. Bottom = least favorite.</p>
         </div>
-      {% endif %}
-    {% endwith %}
+      </div>
 
-    {# ── Ranking form ─────────────────────────────────────────────── #}
-    <form
-      method="POST"
-      action="{{ url_for('voting_submit', code=room.room_code) }}"
-      id="vote-form"
-    >
-      {# Hidden input — JS keeps this updated as the user reorders #}
-      <input
-        type="hidden"
-        id="ranked-ids"
-        name="ranked_ids"
-        value="{{ suggestions | map(attribute='id') | join(',') }}"
-      >
+      <form method="POST" action="{{ url_for('voting_submit', code=room.get('room_code', '')) }}">
+        <input type="hidden" id="ranked-ids" name="ranked_ids" value="">
 
-      <div class="panel vote-panel">
-        <div class="vote-panel__header">
-          <h2 class="panel-title">Your Ranking</h2>
-          {% if has_voted %}
-            <span class="vote-submitted-badge">✓ Vote submitted</span>
-          {% endif %}
-        </div>
-        <p class="vote-panel__hint">
-          Drag items to reorder, or use the ▲ ▼ buttons.
-        </p>
+        <script id="page-data" type="application/json">
+          {{ {
+            "roomCode": room.get("room_code", ""),
+            "participantsCount": participants_count,
+            "votersCount": voters_count
+          } | tojson }}
+        </script>
 
         <ul id="ranking-list" class="ranking-list">
-        {% for suggestion in suggestions %}
-            <li class="rank-item" draggable="true" data-id="{{ suggestion.id }}">
-            <span class="rank-handle" aria-hidden="true">⠿</span>
-            <span class="rank-number">{{ loop.index }}</span>
-            <span class="rank-text">{{ suggestion.text }}</span>
+          {% for suggestion in suggestions %}
+            <li
+              class="rank-item"
+              data-id="{{ suggestion.id }}"
+              draggable="true"
+            >
+              <div class="rank-item__left">
+                <span class="rank-number">{{ loop.index }}</span>
+                <div class="rank-text-wrap">
+                  <p class="rank-text">{{ suggestion.text }}</p>
+                  <p class="rank-meta">
+                    Added by {{ suggestion.participant_name }}
+                  </p>
+                </div>
+              </div>
 
-            {# NEW: Only show name if the room is NOT set to anonymous #}
-            {% if not room.results_anonymous %}
-                <span class="rank-author">{{ suggestion.participant_name }}</span>
-            {% endif %}
-
-            <div class="rank-arrows">
+              <div class="rank-actions">
                 <button type="button" class="rank-arrow" aria-label="Move up">▲</button>
                 <button type="button" class="rank-arrow" aria-label="Move down">▼</button>
-            </div>
+              </div>
             </li>
-        {% endfor %}
+          {% endfor %}
         </ul>
 
-        <button type="submit" class="btn btn--primary btn--full vote-submit-btn">
-          {% if has_voted %}
-            Update My Vote
-          {% else %}
-            Submit Vote
-          {% endif %}
-        </button>
-      </div>
-    </form>
-
+        <div class="voting-actions">
+          <button type="submit" class="btn btn--primary btn--large">
+            Submit Ranking
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </section>
 
-<script>
-  const PAGE_DATA = JSON.parse(document.getElementById("page-data").textContent);
-  const ROOM_CODE = PAGE_DATA.roomCode;
-  const POLL_MS = 3000;
-
-  const rankingList = document.getElementById("ranking-list");
-  const rankedIdsInput = document.getElementById("ranked-ids");
-  const votersCountEl = document.getElementById("voters-count");
-  const progressFillEl = document.getElementById("progress-fill");
-
-  let draggedItem = null;
-
-  function getRankItems() {
-    return Array.from(rankingList.querySelectorAll(".rank-item"));
-  }
-
-  function syncRankingState() {
-    const items = getRankItems();
-
-    items.forEach((item, index) => {
-      const numberEl = item.querySelector(".rank-number");
-      if (numberEl) {
-        numberEl.textContent = index + 1;
-      }
-    });
-
-    rankedIdsInput.value = items.map(item => item.dataset.id).join(",");
-  }
-
-  function clearDragStates() {
-    getRankItems().forEach(item => {
-      item.classList.remove("dragging", "drag-over");
-    });
-  }
-
-  function moveItem(item, direction) {
-    if (!item) return;
-
-    if (direction === "up") {
-      const prev = item.previousElementSibling;
-      if (prev) {
-        rankingList.insertBefore(item, prev);
-        syncRankingState();
-      }
-      return;
-    }
-
-    if (direction === "down") {
-      const next = item.nextElementSibling;
-      if (next) {
-        rankingList.insertBefore(next, item);
-        syncRankingState();
-      }
-    }
-  }
-
-  function getDropTarget(afterY) {
-    const candidates = getRankItems().filter(item => item !== draggedItem);
-
-    return candidates.reduce(
-      (closest, item) => {
-        const box = item.getBoundingClientRect();
-        const offset = afterY - (box.top + box.height / 2);
-
-        if (offset < 0 && offset > closest.offset) {
-          return { offset, element: item };
-        }
-
-        return closest;
-      },
-      { offset: Number.NEGATIVE_INFINITY, element: null }
-    ).element;
-  }
-
-  rankingList.addEventListener("click", (event) => {
-    const button = event.target.closest(".rank-arrow");
-    if (!button) return;
-
-    const item = button.closest(".rank-item");
-    if (!item) return;
-
-    const isUp = button.textContent.trim() === "▲";
-    moveItem(item, isUp ? "up" : "down");
-  });
-
-  rankingList.addEventListener("dragstart", (event) => {
-    const item = event.target.closest(".rank-item");
-    if (!item) return;
-
-    draggedItem = item;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", item.dataset.id || "");
-
-    requestAnimationFrame(() => {
-      item.classList.add("dragging");
-    });
-  });
-
-  rankingList.addEventListener("dragend", () => {
-    clearDragStates();
-    draggedItem = null;
-    syncRankingState();
-  });
-
-  rankingList.addEventListener("dragover", (event) => {
-    event.preventDefault();
-    if (!draggedItem) return;
-
-    const dropTarget = getDropTarget(event.clientY);
-
-    clearDragStates();
-    draggedItem.classList.add("dragging");
-
-    if (dropTarget) {
-      dropTarget.classList.add("drag-over");
-      rankingList.insertBefore(draggedItem, dropTarget);
-    } else {
-      rankingList.appendChild(draggedItem);
-    }
-  });
-
-  rankingList.addEventListener("drop", (event) => {
-    event.preventDefault();
-    clearDragStates();
-    syncRankingState();
-  });
-
-  async function pollStatus() {
-    try {
-      const response = await fetch(`/api/room/${ROOM_CODE}/participants`, {
-        headers: { "Accept": "application/json" }
-      });
-
-      if (!response.ok) return;
-
-      const data = await response.json();
-
-      if (data.phase === "results") {
-        window.location.href = `/room/${ROOM_CODE}/results`;
-        return;
-      }
-
-      if (
-        typeof data.voters_count === "number" &&
-        typeof data.participants_count === "number"
-      ) {
-        if (votersCountEl) {
-          votersCountEl.textContent = data.voters_count;
-        }
-
-        if (progressFillEl) {
-          const pct = data.participants_count > 0
-            ? Math.round((data.voters_count / data.participants_count) * 100)
-            : 0;
-
-          progressFillEl.style.width = `${pct}%`;
-        }
-      }
-    } catch (error) {
-      console.warn("[WTM] Poll failed:", error);
-    }
-  }
-
-  if (progressFillEl) {
-    progressFillEl.style.width = `${progressFillEl.dataset.pct || 0}%`;
-  }
-
-  syncRankingState();
-  setInterval(pollStatus, POLL_MS);
-</script>
+<script src="{{ url_for('static', filename='js/ranking.js') }}"></script>
 {% endblock %}

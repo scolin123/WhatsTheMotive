@@ -1,45 +1,181 @@
-// whatsthemove/static/js/ranking.js
+(() => {
+  const pageDataEl = document.getElementById("page-data");
+  const rankingList = document.getElementById("ranking-list");
+  const rankedIdsInput = document.getElementById("ranked-ids");
+  const votersCountEl = document.getElementById("voters-count");
+  const progressFillEl = document.getElementById("progress-fill");
 
-document.addEventListener('DOMContentLoaded', () => {
-    const list = document.getElementById('ranking-list');
-    const hiddenInput = document.getElementById('ranked-ids');
+  if (!pageDataEl || !rankingList || !rankedIdsInput) return;
 
-    if (!list || !hiddenInput) return;
+  let pageData = {};
+  try {
+    pageData = JSON.parse(pageDataEl.textContent);
+  } catch (error) {
+    console.warn("[WTM] Could not parse page data:", error);
+    return;
+  }
 
-    // Initialize SortableJS
-    new Sortable(list, {
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        handle: '.rank-handle',
-        onEnd: () => {
-            updateUI();
-        }
+  const ROOM_CODE = pageData.roomCode || "";
+  const POLL_MS = 3000;
+  let draggedItem = null;
+
+  function getRankItems() {
+    return Array.from(rankingList.querySelectorAll(".rank-item"));
+  }
+
+  function syncRankingState() {
+    const items = getRankItems();
+
+    items.forEach((item, index) => {
+      const numberEl = item.querySelector(".rank-number");
+      if (numberEl) {
+        numberEl.textContent = String(index + 1);
+      }
     });
 
-    function updateUI() {
-        const items = [...list.querySelectorAll('.rank-item')];
-        
-        // Update visual numbers
-        items.forEach((item, index) => {
-            const numSpan = item.querySelector('.rank-number');
-            if (numSpan) numSpan.textContent = index + 1;
-        });
+    rankedIdsInput.value = items.map((item) => item.dataset.id).join(",");
+  }
 
-        // Sync hidden input for Flask POST
-        const ids = items.map(item => item.dataset.id);
-        hiddenInput.value = ids.join(',');
+  function clearDragStates() {
+    getRankItems().forEach((item) => {
+      item.classList.remove("dragging", "drag-over");
+    });
+  }
+
+  function moveItem(item, direction) {
+    if (!item) return;
+
+    if (direction === "up") {
+      const prev = item.previousElementSibling;
+      if (prev) {
+        rankingList.insertBefore(item, prev);
+        syncRankingState();
+      }
+      return;
     }
 
-    // Auto-redirect if everyone finished voting
-    setInterval(async () => {
-        try {
-            const resp = await fetch(`/api/room/${ROOM_CODE}/participants`);
-            const data = await resp.json();
-            if (data.phase === 'results') {
-                window.location.href = `/room/${ROOM_CODE}/results`;
-            }
-        } catch (e) {
-            console.warn("Polling error:", e);
+    if (direction === "down") {
+      const next = item.nextElementSibling;
+      if (next) {
+        rankingList.insertBefore(next, item);
+        syncRankingState();
+      }
+    }
+  }
+
+  function getDropTarget(y) {
+    const candidates = getRankItems().filter((item) => item !== draggedItem);
+
+    return candidates.reduce(
+      (closest, item) => {
+        const box = item.getBoundingClientRect();
+        const offset = y - (box.top + box.height / 2);
+
+        if (offset < 0 && offset > closest.offset) {
+          return { offset, element: item };
         }
-    }, 3000);
-});
+
+        return closest;
+      },
+      { offset: Number.NEGATIVE_INFINITY, element: null }
+    ).element;
+  }
+
+  rankingList.addEventListener("click", (event) => {
+    const button = event.target.closest(".rank-arrow");
+    if (!button) return;
+
+    const item = button.closest(".rank-item");
+    if (!item) return;
+
+    const isUp = button.textContent.trim() === "▲";
+    moveItem(item, isUp ? "up" : "down");
+  });
+
+  rankingList.addEventListener("dragstart", (event) => {
+    const item = event.target.closest(".rank-item");
+    if (!item) return;
+
+    draggedItem = item;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.dataset.id || "");
+
+    requestAnimationFrame(() => {
+      item.classList.add("dragging");
+    });
+  });
+
+  rankingList.addEventListener("dragend", () => {
+    clearDragStates();
+    draggedItem = null;
+    syncRankingState();
+  });
+
+  rankingList.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    if (!draggedItem) return;
+
+    const dropTarget = getDropTarget(event.clientY);
+
+    clearDragStates();
+    draggedItem.classList.add("dragging");
+
+    if (dropTarget) {
+      dropTarget.classList.add("drag-over");
+      rankingList.insertBefore(draggedItem, dropTarget);
+    } else {
+      rankingList.appendChild(draggedItem);
+    }
+  });
+
+  rankingList.addEventListener("drop", (event) => {
+    event.preventDefault();
+    clearDragStates();
+    syncRankingState();
+  });
+
+  async function pollStatus() {
+    if (!ROOM_CODE) return;
+
+    try {
+      const response = await fetch(`/api/room/${ROOM_CODE}/participants`, {
+        headers: { Accept: "application/json" }
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (data.phase === "results") {
+        window.location.href = `/room/${ROOM_CODE}/results`;
+        return;
+      }
+
+      if (
+        typeof data.voters_count === "number" &&
+        typeof data.participants_count === "number"
+      ) {
+        if (votersCountEl) {
+          votersCountEl.textContent = String(data.voters_count);
+        }
+
+        if (progressFillEl) {
+          const pct = data.participants_count > 0
+            ? Math.round((data.voters_count / data.participants_count) * 100)
+            : 0;
+
+          progressFillEl.style.width = `${pct}%`;
+        }
+      }
+    } catch (error) {
+      console.warn("[WTM] Poll failed:", error);
+    }
+  }
+
+  if (progressFillEl) {
+    progressFillEl.style.width = `${progressFillEl.dataset.pct || 0}%`;
+  }
+
+  syncRankingState();
+  setInterval(pollStatus, POLL_MS);
+})();
