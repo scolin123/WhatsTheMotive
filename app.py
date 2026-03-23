@@ -548,6 +548,8 @@ def api_participants(code: str):
         "voters_count":       len(voters),
         "participants_count": len(participants),
         "all_suggestions":    all_suggestions,
+        "voting_method":      room.get("voting_method", "borda"),
+        "results_anonymous":  room.get("results_anonymous", True),
     })
 
 

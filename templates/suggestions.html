@@ -115,10 +115,12 @@
       {% for s in all_suggestions %}
         {% set suggester = participants | selectattr("display_name", "equalto", s.participant_name) | first | default({}) %}
         <li class="participants-list__item">
-          {% if suggester.avatar %}
-            <img src="{{ url_for('static', filename='images/' ~ suggester.avatar) }}" alt="{{ s.participant_name }}" class="participant-avatar participant-avatar--img">
-          {% else %}
-            <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+          {% if not room.results_anonymous %}
+            {% if suggester.avatar %}
+              <img src="{{ url_for('static', filename='images/' ~ suggester.avatar) }}" alt="{{ s.participant_name }}" class="participant-avatar participant-avatar--img">
+            {% else %}
+              <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+            {% endif %}
           {% endif %}
           <span class="participant-name">{{ s.text }}</span>
         </li>
@@ -226,9 +228,9 @@
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
-        const avatarHtml = avatarMap[name]
+        const avatarHtml = data.results_anonymous ? '' : (avatarMap[name]
           ? `<img src="/static/images/${avatarMap[name]}" alt="${name}" class="participant-avatar participant-avatar--img">`
-          : `<span class="participant-avatar">${initial}</span>`;
+          : `<span class="participant-avatar">${initial}</span>`);
         return `
           <li class="participants-list__item">
             ${avatarHtml}
