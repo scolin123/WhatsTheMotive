@@ -1241,3 +1241,12 @@ body {
   .winner-card__text { font-size: 1.6rem; }
   .rank-author       { display: none; }
 }
+
+.participant-avatar--img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}

@@ -15,6 +15,7 @@ from services.room_service import (
     add_participant,
     get_participants,
     update_phase,
+    set_avatar,
 )
 from services.suggestion_service import (
     add_suggestion,
@@ -33,6 +34,12 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True
+
+# Add this near the top of app.py
+VOTING_METHODS = {
+    "borda": "Borda Count",
+    "irv": "Instant Runoff (Elimination)"
+}
 
 
 # ---------------------------------------------------------------------------
@@ -211,12 +218,19 @@ def lobby(code: str):
         return redirect(url_for("join_room_page", code=code))
 
     participants = get_participants(room["id"])
+    my_participant = next(
+        (p for p in participants if p["display_name"] == display_name), {}
+    )
     return render_template(
         "lobby.html",
         room=room,
         participants=participants,
         display_name=display_name,
         is_host=is_host,
+        my_avatar=my_participant.get("avatar"),
+        voting_method_label=VOTING_METHODS.get(
+            room.get("voting_method", "borda"), "Borda Count"
+        ),
     )
 
 
@@ -276,6 +290,7 @@ def suggestions_page(code: str):
     slots_total     = room["suggestions_per_person"]
     slots_remaining = max(0, slots_total - slots_used)
 
+    participants = get_participants(room["id"])
     return render_template(
         "suggestions.html",
         room=room,
@@ -286,7 +301,35 @@ def suggestions_page(code: str):
         slots_used=slots_used,
         slots_total=slots_total,
         slots_remaining=slots_remaining,
+        participants=participants,
     )
+
+
+@app.route("/room/<code>/set-avatar", methods=["POST"])
+def set_avatar_route(code: str):
+    display_name, _ = _require_session(code)
+    if display_name is None:
+        return jsonify({"error": "Not in session."}), 401
+
+    room = get_room_by_code(code)
+    if not room:
+        return jsonify({"error": "Room not found."}), 404
+
+    avatar = request.json.get("avatar", "").strip()
+    if not avatar:
+        return jsonify({"error": "No avatar provided."}), 400
+
+    # Only allow expected filenames
+    allowed = {f"avatar_{i}.png" for i in range(1, 13)}
+    if avatar not in allowed:
+        return jsonify({"error": "Invalid avatar."}), 400
+
+    try:
+        set_avatar(room["id"], display_name, avatar)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True, "avatar": avatar})
 
 
 @app.route("/room/<code>/suggestions", methods=["POST"])

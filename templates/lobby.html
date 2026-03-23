@@ -1,19 +1,44 @@
 {% extends "base.html" %}
 
 {% block content %}
-{# room, participants, and is_host are always provided by the lobby() route.   #}
-{# No {% set %} redeclarations needed — they cause a VS Code JS linter error.  #}
 
-{#
-  Data island — Jinja values live here, not inside the <script> block.
-  type="application/json" means the JS linter never tries to parse it.
-#}
 <script id="page-data" type="application/json">
   {
     "roomCode": {{ room.room_code | tojson }},
-    "hostName": {{ room.host_name | tojson }}
+    "hostName": {{ room.host_name | tojson }},
+    "displayName": {{ display_name | tojson }}
   }
 </script>
+
+{# ── Avatar picker modal ──────────────────────────────────────────── #}
+<div id="avatar-modal" class="avatar-modal" style="display:none;">
+  <div class="avatar-modal__backdrop"></div>
+  <div class="avatar-modal__box">
+    <h2 class="avatar-modal__title">Pick your character</h2>
+    <p class="avatar-modal__sub">This is how others will see you in the lobby.</p>
+
+    <div class="avatar-grid">
+      {% for i in range(1, 13) %}
+        <button
+          type="button"
+          class="avatar-option"
+          data-avatar="avatar_{{ i }}.png"
+          onclick="selectAvatar('avatar_{{ i }}.png', this)"
+        >
+          <img
+            src="{{ url_for('static', filename='images/avatar_' ~ i ~ '.png') }}"
+            alt="Character {{ i }}"
+            class="avatar-option__img"
+          >
+        </button>
+      {% endfor %}
+    </div>
+
+    <button type="button" class="btn btn--primary" id="confirm-avatar-btn" onclick="confirmAvatar()" disabled>
+      Confirm
+    </button>
+  </div>
+</div>
 
 <section class="page page--lobby">
   <div class="container">
@@ -62,6 +87,25 @@
             <span class="info-value">{{ room.suggestions_per_person }}</span>
           </div>
         </div>
+
+        {# ── Avatar picker trigger ── #}
+        <div class="avatar-picker-trigger">
+          <p class="info-label">Your Character</p>
+          <button type="button" class="avatar-pick-btn" onclick="openAvatarModal()" id="pick-avatar-btn">
+            {% if my_avatar %}
+              <img
+                src="{{ url_for('static', filename='images/' ~ my_avatar) }}"
+                alt="Your avatar"
+                class="avatar-pick-btn__img"
+              >
+              <span>Change</span>
+            {% else %}
+              <span class="avatar-pick-btn__placeholder">＋</span>
+              <span>Choose character</span>
+            {% endif %}
+          </button>
+        </div>
+
       </div>
 
       <div class="panel">
@@ -70,9 +114,17 @@
         <ul id="participants-list" class="participants-list">
           {% for participant in participants %}
             <li class="participant-item">
-              <span class="participant-avatar">
-                {{ participant.display_name[0] | upper }}
-              </span>
+              {% if participant.avatar %}
+                <img
+                  src="{{ url_for('static', filename='images/' ~ participant.avatar) }}"
+                  alt="{{ participant.display_name }}"
+                  class="participant-avatar participant-avatar--img"
+                >
+              {% else %}
+                <span class="participant-avatar">
+                  {{ participant.display_name[0] | upper }}
+                </span>
+              {% endif %}
               <span class="participant-name">{{ participant.display_name }}</span>
             </li>
           {% else %}
@@ -88,11 +140,6 @@
           <p class="action-text">
             You are the host. Once everyone has joined, you'll be able to start the suggestions phase.
           </p>
-          {#
-            POST form — prevents accidental re-trigger on page refresh.
-            The start_suggestions route advances phase to 'suggesting'
-            then redirects the host to the suggestions page.
-          #}
           <form method="POST" action="{{ url_for('start_suggestions', code=room.room_code) }}">
             <button type="submit" class="btn btn--primary" id="start-btn">
               Start Suggestions
@@ -111,15 +158,188 @@
   </div>
 </section>
 
-<script>
-  // ── Read server-rendered values from the data island ────────────
-  // No Jinja here — keeps the VS Code JS linter happy.
-  const PAGE_DATA = JSON.parse(document.getElementById('page-data').textContent);
-  const ROOM_CODE = PAGE_DATA.roomCode;
-  const HOST_NAME = PAGE_DATA.hostName;
-  const POLL_MS   = 3000;
+<style>
+  /* ── Avatar modal ───────────────────────────────────────────────── */
+  .avatar-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .avatar-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+  }
+  .avatar-modal__box {
+    position: relative;
+    background: var(--color-surface, #1a1a1a);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 32px;
+    width: min(480px, 90vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .avatar-modal__title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .avatar-modal__sub {
+    margin: 0;
+    opacity: 0.6;
+    font-size: 0.9rem;
+    text-align: center;
+  }
 
-  // ── Copy room code to clipboard ──────────────────────────────────
+  /* ── Avatar grid ────────────────────────────────────────────────── */
+  .avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    width: 100%;
+  }
+  .avatar-option {
+    background: rgba(255,255,255,0.05);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .avatar-option:hover {
+    border-color: rgba(255,255,255,0.3);
+    transform: scale(1.05);
+  }
+  .avatar-option.selected {
+    border-color: var(--color-primary, #f5c842);
+    background: rgba(245, 200, 66, 0.1);
+  }
+  .avatar-option__img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+
+  /* ── Pick button ────────────────────────────────────────────────── */
+  .avatar-picker-trigger {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .avatar-pick-btn {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px dashed rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    color: inherit;
+    font-size: 0.95rem;
+    transition: background 0.15s, border-color 0.15s;
+    width: 100%;
+  }
+  .avatar-pick-btn:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(255,255,255,0.4);
+  }
+  .avatar-pick-btn__img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+  .avatar-pick-btn__placeholder {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.08);
+    border-radius: 6px;
+    font-size: 1.2rem;
+  }
+
+  /* ── Participant list avatars ────────────────────────────────────── */
+  .participant-avatar--img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+</style>
+
+<script>
+  const PAGE_DATA   = JSON.parse(document.getElementById('page-data').textContent);
+  const ROOM_CODE   = PAGE_DATA.roomCode;
+  const HOST_NAME   = PAGE_DATA.hostName;
+  const DISPLAY_NAME = PAGE_DATA.displayName;
+  const POLL_MS     = 3000;
+
+  let selectedAvatar = null;
+
+  // ── Avatar modal ─────────────────────────────────────────────────
+  function openAvatarModal() {
+    document.getElementById('avatar-modal').style.display = 'flex';
+  }
+
+  function closeAvatarModal() {
+    document.getElementById('avatar-modal').style.display = 'none';
+  }
+
+  // Close on backdrop click
+  document.querySelector('.avatar-modal__backdrop')
+    .addEventListener('click', closeAvatarModal);
+
+  function selectAvatar(filename, el) {
+    document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedAvatar = filename;
+    document.getElementById('confirm-avatar-btn').disabled = false;
+  }
+
+  async function confirmAvatar() {
+    if (!selectedAvatar) return;
+
+    try {
+      const resp = await fetch(`/room/${ROOM_CODE}/set-avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: selectedAvatar }),
+      });
+      const data = await resp.json();
+      if (!data.ok) { console.error(data.error); return; }
+
+      // Update the pick button to show chosen avatar
+      const btn = document.getElementById('pick-avatar-btn');
+      btn.innerHTML = `
+        <img src="/static/images/${selectedAvatar}" alt="Your avatar" class="avatar-pick-btn__img">
+        <span>Change</span>
+      `;
+
+      closeAvatarModal();
+    } catch (err) {
+      console.error('[WTM] Avatar save error:', err);
+    }
+  }
+
+  // ── Copy room code ───────────────────────────────────────────────
   function copyCode() {
     if (!navigator.clipboard || !ROOM_CODE) return;
     navigator.clipboard.writeText(ROOM_CODE).then(() => {
@@ -130,14 +350,7 @@
     }).catch(() => {});
   }
 
-  // ── Poll /api/room/<code>/participants ───────────────────────────
-  //
-  //  Response shape: { "phase": "lobby", "participants": [...] }
-  //
-  //  - Updates the participant list and count for everyone
-  //  - Guests auto-redirect to /suggestions when phase leaves 'lobby'
-  //    (host is already redirected server-side by start_suggestions)
-  //
+  // ── Poll participants ────────────────────────────────────────────
   async function refreshParticipants() {
     if (!ROOM_CODE) return;
     let data;
@@ -154,13 +367,11 @@
 
     if (!data || !Array.isArray(data.participants)) return;
 
-    // Guest auto-redirect — triggers when host clicks Start Suggestions
     if (data.phase && data.phase !== 'lobby') {
       window.location.href = `/room/${ROOM_CODE}/suggestions`;
       return;
     }
 
-    // Rebuild participant list
     const list  = document.getElementById('participants-list');
     const count = document.getElementById('participant-count');
     if (!list || !count) return;
@@ -173,11 +384,14 @@
     }
 
     list.innerHTML = data.participants.map(p => {
-      const name    = p.display_name || 'Unknown';
-      const initial = name.charAt(0).toUpperCase();
+      const name   = p.display_name || 'Unknown';
+      const avatar = p.avatar;
+      const avatarHtml = avatar
+        ? `<img src="/static/images/${avatar}" alt="${name}" class="participant-avatar participant-avatar--img">`
+        : `<span class="participant-avatar">${name.charAt(0).toUpperCase()}</span>`;
       return `
         <li class="participant-item">
-          <span class="participant-avatar">${initial}</span>
+          ${avatarHtml}
           <span class="participant-name">${name}</span>
         </li>`;
     }).join('');

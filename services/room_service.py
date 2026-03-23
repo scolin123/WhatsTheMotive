@@ -42,19 +42,6 @@ def create_room(
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
-
-    Args:
-        host_name:            Display name of the host.
-        title:                A short label for the session (e.g. 'Friday plans').
-        max_participants:     Hard cap on how many people can join.
-        suggestions_per_person: How many suggestions each participant may submit.
-
-    Returns:
-        The newly created room record as a dict.
-
-    Raises:
-        ValueError: If any required field is missing or blank.
-        RuntimeError: If the insert fails unexpectedly.
     """
     host_name = host_name.strip()
     title = title.strip()
@@ -71,14 +58,14 @@ def create_room(
     code = _unique_code()
 
     room_resp = supabase.table("rooms").insert({
-        "room_code": code,
-        "host_name": host_name,
-        "title": title,
-        "max_participants": max_participants,
+        "room_code":             code,
+        "host_name":             host_name,
+        "title":                 title,
+        "max_participants":      max_participants,
         "suggestions_per_person": suggestions_per_person,
-        "phase": "lobby",
-        "results_anonymous": results_anonymous,
-        "voting_method": voting_method,
+        "phase":                 "lobby",
+        "results_anonymous":     results_anonymous,
+        "voting_method":         voting_method,
     }).execute()
 
     if not room_resp.data:
@@ -88,7 +75,7 @@ def create_room(
 
     # Host is automatically the first participant
     participant_resp = supabase.table("participants").insert({
-        "room_id": room["id"],
+        "room_id":      room["id"],
         "display_name": host_name,
     }).execute()
 
@@ -99,15 +86,7 @@ def create_room(
 
 
 def get_room_by_code(room_code: str) -> dict | None:
-    """
-    Find a room by its join code (case-insensitive).
-
-    Args:
-        room_code: The room code to look up.
-
-    Returns:
-        The room record as a dict, or None if not found.
-    """
+    """Find a room by its join code (case-insensitive)."""
     resp = (
         supabase.table("rooms")
         .select("*")
@@ -118,26 +97,11 @@ def get_room_by_code(room_code: str) -> dict | None:
 
 
 def update_phase(room_id: str, phase: str) -> dict:
-    """
-    Advance a room to a new phase.
-
-    Valid transitions: 'lobby' → 'suggesting' → 'voting' → 'results'
-
-    Args:
-        room_id: UUID of the room.
-        phase:   The target phase.
-
-    Returns:
-        The updated room record as a dict.
-
-    Raises:
-        ValueError: If the phase is invalid or the room does not exist.
-    """
+    """Advance a room to a new phase."""
     valid_phases = {"lobby", "suggesting", "voting", "results"}
     if phase not in valid_phases:
         raise ValueError(f"Invalid phase '{phase}'. Must be one of: {sorted(valid_phases)}.")
 
-    # Confirm room exists before attempting update
     existing = supabase.table("rooms").select("id").eq("id", room_id).execute()
     if not existing.data:
         raise ValueError(f"No room found with id '{room_id}'.")
@@ -160,27 +124,12 @@ def update_phase(room_id: str, phase: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def add_participant(room_id: str, display_name: str) -> dict:
-    """
-    Add a new participant to a room that is still in the lobby phase.
-
-    Args:
-        room_id:      UUID of the room to join.
-        display_name: The name this participant will go by.
-
-    Returns:
-        The newly created participant record as a dict.
-
-    Raises:
-        ValueError: If the room doesn't exist, has already started,
-                    is full, or the display name is taken (case-insensitive).
-        RuntimeError: If the insert fails unexpectedly.
-    """
+    """Add a new participant to a room that is still in the lobby phase."""
     display_name = display_name.strip()
 
     if not display_name:
         raise ValueError("display_name is required and cannot be blank.")
 
-    # Fetch room to validate phase and capacity in one query
     room_resp = (
         supabase.table("rooms")
         .select("phase, max_participants")
@@ -195,13 +144,11 @@ def add_participant(room_id: str, display_name: str) -> dict:
     if room["phase"] != "lobby":
         raise ValueError("This room has already started. You can no longer join.")
 
-    # Fetch current participants to check capacity and name uniqueness together
     current_participants = get_participants(room_id)
 
     if len(current_participants) >= room["max_participants"]:
         raise ValueError("This room is full.")
 
-    # Case-insensitive duplicate name check
     existing_names = [p["display_name"].lower() for p in current_participants]
     if display_name.lower() in existing_names:
         raise ValueError(f"The name '{display_name}' is already taken in this room.")
@@ -219,15 +166,7 @@ def add_participant(room_id: str, display_name: str) -> dict:
 
 
 def get_participants(room_id: str) -> list[dict]:
-    """
-    Get all participants in a room, ordered by join time.
-
-    Args:
-        room_id: UUID of the room.
-
-    Returns:
-        List of participant records as dicts. Empty list if none found.
-    """
+    """Get all participants in a room, ordered by join time."""
     resp = (
         supabase.table("participants")
         .select("*")
@@ -236,3 +175,33 @@ def get_participants(room_id: str) -> list[dict]:
         .execute()
     )
     return resp.data or []
+
+
+def set_avatar(room_id: str, display_name: str, avatar: str) -> dict:
+    """
+    Save a participant's chosen avatar.
+
+    Args:
+        room_id:      UUID of the room.
+        display_name: The participant's display name.
+        avatar:       Avatar filename e.g. 'avatar_3.png'
+
+    Returns:
+        The updated participant record.
+
+    Raises:
+        ValueError:   If the participant is not found.
+        RuntimeError: If the update fails.
+    """
+    resp = (
+        supabase.table("participants")
+        .update({"avatar": avatar})
+        .eq("room_id", room_id)
+        .eq("display_name", display_name)
+        .execute()
+    )
+
+    if not resp.data:
+        raise RuntimeError("Failed to update avatar — Supabase returned no data.")
+
+    return resp.data[0]

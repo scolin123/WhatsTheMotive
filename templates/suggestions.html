@@ -113,8 +113,13 @@
     {# id="all-suggestions-list" so JS can rebuild this list every 3 s #}
     <ul class="participants-list suggestion-list" id="all-suggestions-list">
       {% for s in all_suggestions %}
+        {% set suggester = participants | selectattr("display_name", "equalto", s.participant_name) | first | default({}) %}
         <li class="participants-list__item">
-          <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+          {% if suggester.avatar %}
+            <img src="{{ url_for('static', filename='images/' ~ suggester.avatar) }}" alt="{{ s.participant_name }}" class="participant-avatar participant-avatar--img">
+          {% else %}
+            <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+          {% endif %}
           <span class="participant-name">{{ s.text }}</span>
         </li>
       {% else %}
@@ -208,17 +213,25 @@
     if (data.all_suggestions.length === 0) {
       list.innerHTML = '<li class="participant-empty">No suggestions yet.</li>';
     } else {
+      const avatarMap = {};
+      (data.participants || []).forEach(p => {
+        if (p.avatar) avatarMap[p.display_name] = p.avatar;
+      });
+
       list.innerHTML = data.all_suggestions.map(s => {
-        const initial  = (s.participant_name || '?').charAt(0).toUpperCase();
-        // Escape HTML to prevent XSS from user-submitted text
+        const name     = s.participant_name || '?';
+        const initial  = name.charAt(0).toUpperCase();
         const safeText = (s.text || '')
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
+        const avatarHtml = avatarMap[name]
+          ? `<img src="/static/images/${avatarMap[name]}" alt="${name}" class="participant-avatar participant-avatar--img">`
+          : `<span class="participant-avatar">${initial}</span>`;
         return `
           <li class="participants-list__item">
-            <span class="participant-avatar">${initial}</span>
+            ${avatarHtml}
             <span class="participant-name">${safeText}</span>
           </li>`;
       }).join('');
