@@ -80,6 +80,8 @@ def create_room_submit():
     title                = request.form.get("title", "").strip()
     max_participants_raw = request.form.get("max_participants", "").strip()
     spp_raw              = request.form.get("suggestions_per_person", "").strip()
+    # Get the selected voting method from the radio buttons
+    voting_method        = request.form.get("voting_method", "borda")
     res_anon = request.form.get("results_anonymous") == "on"
 
     errors = []
@@ -117,7 +119,8 @@ def create_room_submit():
             title=title,
             max_participants=max_participants,
             suggestions_per_person=suggestions_per_person,
-            results_anonymous=res_anon
+            results_anonymous=res_anon,
+            voting_method=voting_method  # Pass the method here
         )
     except (ValueError, RuntimeError) as e:
         flash(str(e), "error")
@@ -500,6 +503,9 @@ def results_page(code: str):
     if display_name is None:
         return redirect(url_for("join_room_page", code=code))
 
+    # Explicitly get the voting method to ensure the template receives it
+    voting_method = room.get("voting_method", "borda")
+
     suggestions = get_suggestions(room["id"])
     results     = calculate_results(room["id"], suggestions)
     voters      = get_voters(room["id"])
@@ -513,6 +519,7 @@ def results_page(code: str):
         results=results,
         voters_count=len(voters),
         participants_count=len(participants),
+        voting_method=voting_method,
     )
 
 

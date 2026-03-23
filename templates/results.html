@@ -28,26 +28,36 @@
 
     {# ── Full ranked list — scores shown, no author attribution ───── #}
     <div class="panel">
-        <h2 class="panel-title">Full Rankings</h2>
+        <h2 class="panel-title">Top 3 Rankings</h2>
 
         <ol class="results-list">
-            {% for result in results %}
+            {# Use [:3] to slice the list and only take the first three items #}
+            {% for result in results[:3] %}
             <li class="results-item{% if loop.first %} results-item--winner{% endif %}">
-                <span class="results-position">{{ result.position }}</span>
-                <span class="results-text">{{ result.text }}</span>
-                <div class="results-right">
-                <span class="results-score">
-                  {% if voting_method == 'irv' %}
-                    {{ result.score }} first-choice vote{{ 's' if result.score != 1 else '' }}
+                <span class="results-position">
+                  {% if loop.index == 1 %}
+                    🥇
+                  {% elif loop.index == 2 %}
+                    🥈
+                  {% elif loop.index == 3 %}
+                    🥉
                   {% else %}
-                    {{ result.score }} pts
+                    {{ result.position }}
                   {% endif %}
                 </span>
+                
+                <span class="results-text">{{ result.text }}</span>
+                
+                <div class="results-right">
+                  {% if voting_method == 'borda' %}
+                    <span class="results-score">
+                      {{ result.score }} pts
+                    </span>
+                  {% endif %}
 
-                {# Only show name if the room is NOT set to anonymous #}
-                {% if not room.results_anonymous %}
+                  {% if not room.results_anonymous %}
                     <span class="results-author">Suggested by {{ result.participant_name }}</span>
-                {% endif %}
+                  {% endif %}
                 </div>
             </li>
             {% else %}

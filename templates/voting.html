@@ -76,9 +76,11 @@
                 <span class="rank-number">{{ loop.index }}</span>
                 <div class="rank-text-wrap">
                   <p class="rank-text">{{ suggestion.text }}</p>
+                  {% if not room.get('results_anonymous') %}
                   <p class="rank-meta">
                     Added by {{ suggestion.participant_name }}
                   </p>
+                  {% endif %}
                 </div>
               </div>
 
