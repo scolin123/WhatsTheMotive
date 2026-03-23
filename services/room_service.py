@@ -37,7 +37,8 @@ def create_room(
     title: str,
     max_participants: int,
     suggestions_per_person: int,
-    results_anonymous: bool = True
+    results_anonymous: bool = True,
+    voting_method: str = "borda",
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
@@ -76,7 +77,8 @@ def create_room(
         "max_participants": max_participants,
         "suggestions_per_person": suggestions_per_person,
         "phase": "lobby",
-        "results_anonymous": results_anonymous
+        "results_anonymous": results_anonymous,
+        "voting_method": voting_method,
     }).execute()
 
     if not room_resp.data:

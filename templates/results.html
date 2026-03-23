@@ -36,7 +36,13 @@
                 <span class="results-position">{{ result.position }}</span>
                 <span class="results-text">{{ result.text }}</span>
                 <div class="results-right">
-                <span class="results-score">{{ result.score }} pts</span>
+                <span class="results-score">
+                  {% if voting_method == 'irv' %}
+                    {{ result.score }} first-choice vote{{ 's' if result.score != 1 else '' }}
+                  {% else %}
+                    {{ result.score }} pts
+                  {% endif %}
+                </span>
 
                 {# Only show name if the room is NOT set to anonymous #}
                 {% if not room.results_anonymous %}

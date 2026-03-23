@@ -101,6 +101,42 @@
         <span class="form__hint">If unchecked, the winner's name will be revealed at the end.</span>
       </div>
 
+
+      <div class="form__group">
+        <label class="form__label">Voting Method</label>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <input
+              type="radio"
+              name="voting_method"
+              value="borda"
+              style="margin-top: 3px; flex-shrink: 0;"
+              {% if (form_data | default({})).get('voting_method', 'borda') == 'borda' %}checked{% endif %}
+            >
+            <span style="display: flex; flex-direction: column; gap: 4px;">
+              <strong>Point Count</strong>
+              <span class="form__hint">Rank 1 earns the most points, rank 2 one fewer, etc. Highest total wins.</span>
+            </span>
+          </label>
+
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <input
+              type="radio"
+              name="voting_method"
+              value="irv"
+              style="margin-top: 3px; flex-shrink: 0;"
+              {% if (form_data | default({})).get('voting_method') == 'irv' %}checked{% endif %}
+            >
+            <span style="display: flex; flex-direction: column; gap: 4px;">
+              <strong>Elimination</strong>
+              <span class="form__hint">The lowest-voted suggestion is eliminated each round until one has &gt;50% of the vote.</span>
+            </span>
+          </label>
+
+        </div>
+      </div>
+
       <button class="btn btn--primary btn--full" type="submit">
         <span class="btn__icon">✦</span> Create Room
       </button>

@@ -159,6 +159,22 @@ def join_room_submit():
             "join_room.html", prefill_code=room_code, form_data=request.form
         ), 404
 
+    # Check if this person is already a participant (lost their session)
+    existing_participants = get_participants(room["id"])
+    already_joined = any(
+        p["display_name"].lower() == display_name.lower()
+        for p in existing_participants
+    )
+
+    if already_joined:
+        # Just restore their session rather than trying to add them again
+        is_host = display_name.lower() == room.get("host_name", "").lower()
+        session["room_code"]    = room["room_code"]
+        session["room_id"]      = room["id"]
+        session["display_name"] = display_name
+        session["is_host"]      = is_host
+        return redirect(url_for("lobby", code=room["room_code"]))
+
     try:
         add_participant(room_id=room["id"], display_name=display_name)
     except ValueError as e:
