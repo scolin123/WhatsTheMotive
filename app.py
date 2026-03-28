@@ -171,19 +171,26 @@ def join_room_submit():
 
     # Check if this person is already a participant (lost their session)
     existing_participants = get_participants(room["id"])
-    already_joined = any(
-        p["display_name"].lower() == display_name.lower()
-        for p in existing_participants
+    matched = next(
+        (p for p in existing_participants if p["display_name"].lower() == display_name.lower()),
+        None,
     )
 
-    if already_joined:
-        # Just restore their session rather than trying to add them again
-        is_host = display_name.lower() == room.get("host_name", "").lower()
-        session["room_code"]    = room["room_code"]
-        session["room_id"]      = room["id"]
-        session["display_name"] = display_name
-        session["is_host"]      = is_host
-        return redirect(url_for("lobby", code=room["room_code"]))
+    if matched:
+        # Only restore the session if this is genuinely the same person
+        # (they must already have a valid session for this room)
+        if session.get("room_code") == room["room_code"] and session.get("display_name", "").lower() == display_name.lower():
+            is_host = display_name.lower() == room.get("host_name", "").lower()
+            session["room_code"]    = room["room_code"]
+            session["room_id"]      = room["id"]
+            session["display_name"] = matched["display_name"]
+            session["is_host"]      = is_host
+            return redirect(url_for("lobby", code=room["room_code"]))
+        else:
+            flash(f"The name '{display_name}' is already taken in this room.", "error")
+            return render_template(
+                "join_room.html", prefill_code=room_code, form_data=request.form
+            ), 400
 
     try:
         add_participant(room_id=room["id"], display_name=display_name)
