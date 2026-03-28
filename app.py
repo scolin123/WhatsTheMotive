@@ -549,8 +549,17 @@ def api_participants(code: str):
     voters          = get_voters(room["id"]) if room["phase"] == "voting" else []
     all_suggestions = get_suggestions(room["id"]) if room["phase"] == "suggesting" else []
 
+    # Auto-advance to results if everyone has voted but phase wasn't updated
+    current_phase = room["phase"]
+    if current_phase == "voting" and has_everyone_voted(room["id"], participants):
+        try:
+            update_phase(room["id"], "results")
+            current_phase = "results"
+        except (ValueError, RuntimeError):
+            pass
+
     return jsonify({
-        "phase":              room["phase"],
+        "phase":              current_phase,
         "participants":       participants,
         "voters_count":       len(voters),
         "participants_count": len(participants),
