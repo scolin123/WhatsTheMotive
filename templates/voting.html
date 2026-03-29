@@ -92,12 +92,9 @@
           {% endfor %}
         </ul>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% set submitted = messages | selectattr('0', 'equalto', 'success') | list | length > 0 %}
-        {% endwith %}
         <div class="voting-actions">
-          <button type="submit" class="btn btn--large {{ 'btn--submitted' if submitted else 'btn--primary' }}">
-            {{ 'Submitted!' if submitted else 'Submit Ranking' }}
+          <button type="submit" class="btn btn--large {{ 'btn--submitted' if has_voted else 'btn--primary' }}">
+            {{ 'Submitted!' if has_voted else 'Submit Ranking' }}
           </button>
         </div>
       </form>

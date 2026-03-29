@@ -206,6 +206,13 @@
     progressFillEl.style.width = `${progressFillEl.dataset.pct || 0}%`;
   }
 
+  if (submitBtn) {
+    submitBtn.closest("form").addEventListener("submit", () => {
+      submitBtn.classList.replace("btn--primary", "btn--submitted");
+      submitBtn.textContent = "Submitted!";
+    });
+  }
+
   syncRankingState();
   setInterval(pollStatus, POLL_MS);
 })();
