@@ -46,8 +46,14 @@
     const aDelta = aRect.top - a.getBoundingClientRect().top;
     const bDelta = bRect.top - b.getBoundingClientRect().top;
     const opts = { duration: 200, easing: "ease-out" };
-    a.animate([{ transform: `translateY(${aDelta}px)` }, { transform: "translateY(0)" }], opts);
+    a.style.position = "relative";
+    a.style.zIndex = "1";
+    const anim = a.animate([{ transform: `translateY(${aDelta}px)` }, { transform: "translateY(0)" }], opts);
     b.animate([{ transform: `translateY(${bDelta}px)` }, { transform: "translateY(0)" }], opts);
+    anim.onfinish = () => {
+      a.style.position = "";
+      a.style.zIndex = "";
+    };
   }
 
   function moveItem(item, direction) {
