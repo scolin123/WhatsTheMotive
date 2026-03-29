@@ -42,14 +42,25 @@
     });
   }
 
+  function animateSwap(a, aRect, b, bRect) {
+    const aDelta = aRect.top - a.getBoundingClientRect().top;
+    const bDelta = bRect.top - b.getBoundingClientRect().top;
+    const opts = { duration: 200, easing: "ease-out" };
+    a.animate([{ transform: `translateY(${aDelta}px)` }, { transform: "translateY(0)" }], opts);
+    b.animate([{ transform: `translateY(${bDelta}px)` }, { transform: "translateY(0)" }], opts);
+  }
+
   function moveItem(item, direction) {
     if (!item) return;
 
     if (direction === "up") {
       const prev = item.previousElementSibling;
       if (prev) {
+        const itemRect = item.getBoundingClientRect();
+        const prevRect = prev.getBoundingClientRect();
         rankingList.insertBefore(item, prev);
         syncRankingState();
+        animateSwap(item, itemRect, prev, prevRect);
       }
       return;
     }
@@ -57,8 +68,11 @@
     if (direction === "down") {
       const next = item.nextElementSibling;
       if (next) {
+        const itemRect = item.getBoundingClientRect();
+        const nextRect = next.getBoundingClientRect();
         rankingList.insertBefore(next, item);
         syncRankingState();
+        animateSwap(item, itemRect, next, nextRect);
       }
     }
   }
