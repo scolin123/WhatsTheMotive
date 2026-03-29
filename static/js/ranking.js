@@ -4,6 +4,7 @@
   const rankedIdsInput = document.getElementById("ranked-ids");
   const votersCountEl = document.getElementById("voters-count");
   const progressFillEl = document.getElementById("progress-fill");
+  const submitBtn = document.querySelector(".voting-actions button[type='submit']");
 
   if (!pageDataEl || !rankingList || !rankedIdsInput) return;
 
@@ -34,6 +35,12 @@
     });
 
     rankedIdsInput.value = items.map((item) => item.dataset.id).join(",");
+  }
+
+  function resetSubmitButton() {
+    if (!submitBtn || !submitBtn.classList.contains("btn--submitted")) return;
+    submitBtn.classList.replace("btn--submitted", "btn--primary");
+    submitBtn.textContent = "Submit Ranking";
   }
 
   function clearDragStates() {
@@ -67,6 +74,7 @@
         rankingList.insertBefore(item, prev);
         syncRankingState();
         animateSwap(item, itemRect, prev, prevRect);
+        resetSubmitButton();
       }
       return;
     }
@@ -79,6 +87,7 @@
         rankingList.insertBefore(next, item);
         syncRankingState();
         animateSwap(item, itemRect, next, nextRect);
+        resetSubmitButton();
       }
     }
   }
@@ -129,6 +138,7 @@
     clearDragStates();
     draggedItem = null;
     syncRankingState();
+    resetSubmitButton();
   });
 
   rankingList.addEventListener("dragover", (event) => {
