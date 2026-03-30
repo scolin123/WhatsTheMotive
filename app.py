@@ -1,3 +1,4 @@
+from better_profanity import profanity
 from flask import (
     Flask,
     render_template,
@@ -348,6 +349,10 @@ def suggestions_submit(code: str):
     text = request.form.get("suggestion_text", "").strip()
     if not text:
         flash("Suggestion cannot be blank.", "error")
+        return redirect(url_for("suggestions_page", code=code))
+
+    if profanity.contains_profanity(text):
+        flash("Your suggestion contains inappropriate language. Please revise it.", "error")
         return redirect(url_for("suggestions_page", code=code))
 
     try:
