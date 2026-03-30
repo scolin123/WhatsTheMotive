@@ -592,7 +592,7 @@ def api_describe_suggestion(code: str, suggestion_id: str):
     # Generate via Gemini
     try:
         description = generate_suggestion_description(room["title"], suggestion["text"])
-    except RuntimeError as e:
+    except Exception as e:
         return jsonify({"error": str(e)}), 503
 
     # Persist (non-fatal if it fails)
