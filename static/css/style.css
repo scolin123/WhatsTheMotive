@@ -1261,3 +1261,55 @@ body {
   background: rgba(255,255,255,0.05);
   flex-shrink: 0;
 }
+
+/* ── AI Info Button ─────────────────────────────────────────── */
+.ai-info-btn {
+  background:    none;
+  border:        1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color:         var(--text-faint);
+  font-size:     0.78rem;
+  padding:       0.2rem 0.45rem;
+  cursor:        pointer;
+  flex-shrink:   0;
+  transition:    color 0.12s ease, border-color 0.12s ease;
+}
+.ai-info-btn:hover {
+  color:         var(--text-muted);
+  border-color:  var(--border-strong);
+}
+
+/* ── AI Description Panel ───────────────────────────────────── */
+.ai-description-panel {
+  width:         100%;
+  margin-top:    0.5rem;
+  padding:       0.5rem 0.75rem;
+  border-left:   2px solid var(--border-strong);
+  background:    var(--bg-card-alt);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.ai-description-text {
+  margin:      0;
+  font-size:   0.85rem;
+  color:       var(--text-muted);
+  line-height: 1.55;
+  display:     flex;
+  align-items: center;
+  gap:         0.4rem;
+}
+
+/* ── Spinner ────────────────────────────────────────────────── */
+.ai-spinner {
+  display:          inline-block;
+  width:            11px;
+  height:           11px;
+  border:           2px solid var(--border);
+  border-top-color: var(--text-muted);
+  border-radius:    50%;
+  animation:        spin 0.7s linear infinite;
+  flex-shrink:      0;
+}
+
+/* ── suggestion-item: column layout so panel spans full width ─ */
+.suggestion-item              { flex-direction: column; align-items: stretch; }
+.suggestion-item-row          { display: flex; align-items: center; gap: 0.75rem; width: 100%; }

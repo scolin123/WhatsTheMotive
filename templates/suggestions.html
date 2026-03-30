@@ -90,9 +90,15 @@
     {% if my_suggestions %}
       <ul class="participants-list suggestion-list">
         {% for s in my_suggestions %}
-          <li class="participants-list__item">
-            <span class="suggestion-index">{{ loop.index }}</span>
-            <span class="participant-name">{{ s.text }}</span>
+          <li class="participants-list__item suggestion-item">
+            <div class="suggestion-item-row">
+              <span class="suggestion-index">{{ loop.index }}</span>
+              <span class="participant-name">{{ s.text }}</span>
+              <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">ℹ</button>
+            </div>
+            <div class="ai-description-panel" id="ai-desc-{{ s.id }}" hidden>
+              <p class="ai-description-text"></p>
+            </div>
           </li>
         {% endfor %}
       </ul>
@@ -114,15 +120,21 @@
     <ul class="participants-list suggestion-list" id="all-suggestions-list">
       {% for s in all_suggestions %}
         {% set suggester = participants | selectattr("display_name", "equalto", s.participant_name) | first | default({}) %}
-        <li class="participants-list__item">
-          {% if not room.results_anonymous %}
-            {% if suggester.avatar %}
-              <img src="{{ url_for('static', filename='images/' ~ suggester.avatar) }}" alt="{{ s.participant_name }}" class="participant-avatar participant-avatar--img">
-            {% else %}
-              <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+        <li class="participants-list__item suggestion-item">
+          <div class="suggestion-item-row">
+            {% if not room.results_anonymous %}
+              {% if suggester.avatar %}
+                <img src="{{ url_for('static', filename='images/' ~ suggester.avatar) }}" alt="{{ s.participant_name }}" class="participant-avatar participant-avatar--img">
+              {% else %}
+                <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
+              {% endif %}
             {% endif %}
-          {% endif %}
-          <span class="participant-name">{{ s.text }}</span>
+            <span class="participant-name">{{ s.text }}</span>
+            <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">ℹ</button>
+          </div>
+          <div class="ai-description-panel" id="ai-desc-{{ s.id }}" hidden>
+            <p class="ai-description-text"></p>
+          </div>
         </li>
       {% else %}
         <li class="participant-empty">No suggestions yet.</li>
@@ -220,9 +232,16 @@
         if (p.avatar) avatarMap[p.display_name] = p.avatar;
       });
 
+      // Capture open panels before wiping innerHTML
+      const openIds = new Set();
+      list.querySelectorAll('.ai-description-panel:not([hidden])').forEach(p => {
+        openIds.add(p.id.replace('ai-desc-', ''));
+      });
+
       list.innerHTML = data.all_suggestions.map(s => {
         const name     = s.participant_name || '?';
         const initial  = name.charAt(0).toUpperCase();
+        const safeId   = s.id || '';
         const safeText = (s.text || '')
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
@@ -232,11 +251,27 @@
           ? `<img src="/static/images/${avatarMap[name]}" alt="${name}" class="participant-avatar participant-avatar--img">`
           : `<span class="participant-avatar">${initial}</span>`);
         return `
-          <li class="participants-list__item">
-            ${avatarHtml}
-            <span class="participant-name">${safeText}</span>
+          <li class="participants-list__item suggestion-item">
+            <div class="suggestion-item-row">
+              ${avatarHtml}
+              <span class="participant-name">${safeText}</span>
+              <button class="ai-info-btn" data-suggestion-id="${safeId}" aria-label="Show description">ℹ</button>
+            </div>
+            <div class="ai-description-panel" id="ai-desc-${safeId}" hidden>
+              <p class="ai-description-text"></p>
+            </div>
           </li>`;
       }).join('');
+
+      // Restore any panels that were open before the rebuild
+      openIds.forEach(id => {
+        const panel  = document.getElementById(`ai-desc-${id}`);
+        const cached = window.aiDescCache && window.aiDescCache.get(id);
+        if (panel && cached) {
+          panel.querySelector('.ai-description-text').textContent = cached;
+          panel.removeAttribute('hidden');
+        }
+      });
     }
 
     // Keep the count badge in sync
@@ -245,4 +280,5 @@
 
   setInterval(refreshSuggestions, POLL_MS);
 </script>
+<script src="{{ url_for('static', filename='js/ai-description.js') }}"></script>
 {% endblock %}

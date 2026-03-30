@@ -21,7 +21,10 @@ from services.suggestion_service import (
     add_suggestion,
     get_suggestions,
     get_suggestions_by_participant,
+    get_suggestion_by_id,
+    save_ai_description,
 )
+from services.ai_service import generate_suggestion_description
 from services.voting_service import (
     save_vote,
     get_vote_by_participant,
@@ -563,6 +566,42 @@ def api_participants(code: str):
         "voting_method":      room.get("voting_method", "borda"),
         "results_anonymous":  room.get("results_anonymous", True),
     })
+
+
+# ---------------------------------------------------------------------------
+# API — AI description for a single suggestion (lazy-loaded, cached in DB)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/room/<code>/suggestion/<suggestion_id>/describe")
+def api_describe_suggestion(code: str, suggestion_id: str):
+    room = get_room_by_code(code)
+    if not room:
+        return jsonify({"error": "Room not found."}), 404
+
+    suggestion = get_suggestion_by_id(suggestion_id)
+    if not suggestion:
+        return jsonify({"error": "Suggestion not found."}), 404
+
+    if suggestion["room_id"] != room["id"]:
+        return jsonify({"error": "Suggestion does not belong to this room."}), 409
+
+    # Cache hit — already generated
+    if suggestion.get("ai_description"):
+        return jsonify({"description": suggestion["ai_description"]})
+
+    # Generate via Gemini
+    try:
+        description = generate_suggestion_description(room["title"], suggestion["text"])
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+
+    # Persist (non-fatal if it fails)
+    try:
+        save_ai_description(suggestion_id, description)
+    except Exception:
+        pass
+
+    return jsonify({"description": description})
 
 
 # ---------------------------------------------------------------------------

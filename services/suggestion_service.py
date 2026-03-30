@@ -116,6 +116,22 @@ def get_suggestions_by_participant(room_id: str, participant_name: str) -> list[
     return resp.data or []
 
 
+def get_suggestion_by_id(suggestion_id: str) -> dict | None:
+    resp = (
+        supabase.table("suggestions")
+        .select("*")
+        .eq("id", suggestion_id)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+def save_ai_description(suggestion_id: str, description: str) -> None:
+    supabase.table("suggestions").update(
+        {"ai_description": description}
+    ).eq("id", suggestion_id).execute()
+
+
 def get_suggestion_counts(room_id: str) -> dict[str, int]:
     """
     Return a dict mapping each participant_name to their submission count.

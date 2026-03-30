@@ -81,10 +81,14 @@
                     Added by {{ suggestion.participant_name }}
                   </p>
                   {% endif %}
+                  <div class="ai-description-panel" id="ai-desc-{{ suggestion.id }}" hidden>
+                    <p class="ai-description-text"></p>
+                  </div>
                 </div>
               </div>
 
               <div class="rank-actions">
+                <button type="button" class="ai-info-btn" data-suggestion-id="{{ suggestion.id }}" aria-label="Show description">ℹ</button>
                 <button type="button" class="rank-arrow" aria-label="Move up">▲</button>
                 <button type="button" class="rank-arrow" aria-label="Move down">▼</button>
               </div>
@@ -103,4 +107,5 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/ranking.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ai-description.js') }}"></script>
 {% endblock %}
