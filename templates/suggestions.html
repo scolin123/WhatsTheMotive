@@ -94,7 +94,7 @@
             <div class="suggestion-item-row">
               <span class="suggestion-index">{{ loop.index }}</span>
               <span class="participant-name">{{ s.text }}</span>
-              <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">ℹ</button>
+              <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">i</button>
             </div>
             <div class="ai-description-panel" id="ai-desc-{{ s.id }}" hidden>
               <p class="ai-description-text"></p>
@@ -130,7 +130,7 @@
               {% endif %}
             {% endif %}
             <span class="participant-name">{{ s.text }}</span>
-            <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">ℹ</button>
+            <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">i</button>
           </div>
           <div class="ai-description-panel" id="ai-desc-{{ s.id }}" hidden>
             <p class="ai-description-text"></p>
@@ -255,7 +255,7 @@
             <div class="suggestion-item-row">
               ${avatarHtml}
               <span class="participant-name">${safeText}</span>
-              <button class="ai-info-btn" data-suggestion-id="${safeId}" aria-label="Show description">ℹ</button>
+              <button class="ai-info-btn" data-suggestion-id="${safeId}" aria-label="Show description">i</button>
             </div>
             <div class="ai-description-panel" id="ai-desc-${safeId}" hidden>
               <p class="ai-description-text"></p>
