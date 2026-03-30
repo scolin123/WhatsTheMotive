@@ -488,6 +488,30 @@ def voting_submit(code: str):
 
 
 # ---------------------------------------------------------------------------
+# Force results  (host only, POST)
+# ---------------------------------------------------------------------------
+
+@app.route("/room/<code>/force-results", methods=["POST"])
+def force_results(code: str):
+    if not session.get("is_host") or session.get("room_code") != code:
+        flash("Only the host can do this.", "error")
+        return redirect(url_for("voting_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room:
+        flash("Room not found.", "error")
+        return redirect(url_for("home"))
+
+    try:
+        update_phase(room["id"], "results")
+    except (ValueError, RuntimeError) as e:
+        flash(str(e), "error")
+        return redirect(url_for("voting_page", code=code))
+
+    return redirect(url_for("results_page", code=code))
+
+
+# ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
 

@@ -103,6 +103,25 @@
         </div>
       </form>
     </div>
+  {% if is_host %}
+    <div class="container" style="padding-bottom: 2rem;">
+      <form method="POST" action="{{ url_for('force_results', code=room.get('room_code', '')) }}" id="force-results-form">
+        <button type="button" class="btn btn--full" style="background: none; border: 1px solid var(--border); color: var(--text-muted);" onclick="document.getElementById('phase-confirm-overlay').removeAttribute('hidden')">
+          Reveal Results
+        </button>
+      </form>
+    </div>
+
+    <div id="phase-confirm-overlay" class="confirm-overlay" hidden>
+      <div class="confirm-dialog">
+        <p class="confirm-dialog__message">Are you sure you want to move on to the next phase?</p>
+        <div class="confirm-dialog__actions">
+          <button class="btn" style="background: none; border: 1px solid var(--border); color: var(--text-muted);" onclick="document.getElementById('phase-confirm-overlay').setAttribute('hidden', '')">Cancel</button>
+          <button class="btn btn--primary" onclick="document.getElementById('force-results-form').submit()">Yes, reveal results</button>
+        </div>
+      </div>
+    </div>
+  {% endif %}
   </div>
 </section>
 
