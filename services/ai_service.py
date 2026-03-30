@@ -14,7 +14,7 @@ def generate_suggestion_description(room_title: str, suggestion_text: str) -> st
         raise RuntimeError("GEMINI_API_KEY is not configured.")
 
     genai.configure(api_key=Config.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-3.1-flash-preview")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     prompt = (
         f'The topic is: "{room_title}".\n'
