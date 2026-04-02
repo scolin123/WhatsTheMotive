@@ -10,7 +10,8 @@
   {
     "roomCode":       {{ room.room_code | tojson }},
     "slotsRemaining": {{ slots_remaining | tojson }},
-    "phaseDeadline":  {{ phase_deadline | tojson }}
+    "phaseDeadline":  {{ phase_deadline | tojson }},
+    "serverNow":      {{ server_now | tojson }}
   }
 </script>
 
@@ -177,7 +178,7 @@
 
   // ── Countdown timer ────────────────────────────────────────────
   let deadline = PAGE_DATA.phaseDeadline ? new Date(PAGE_DATA.phaseDeadline) : null;
-  let serverOffset = 0; // ms difference: server clock - local clock
+  let serverOffset = PAGE_DATA.serverNow ? new Date(PAGE_DATA.serverNow) - Date.now() : 0;
   const timerEl = document.getElementById('phase-timer');
 
   function updateTimer() {

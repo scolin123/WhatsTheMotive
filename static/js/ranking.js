@@ -22,7 +22,7 @@
 
   // ── Countdown timer ────────────────────────────────────────────
   let deadline = pageData.phaseDeadline ? new Date(pageData.phaseDeadline) : null;
-  let serverOffset = 0; // ms difference: server clock - local clock
+  let serverOffset = pageData.serverNow ? new Date(pageData.serverNow) - Date.now() : 0;
   const timerEl = document.getElementById("phase-timer");
 
   function updateTimer() {

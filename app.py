@@ -318,6 +318,7 @@ def suggestions_page(code: str):
         slots_remaining=slots_remaining,
         participants=participants,
         phase_deadline=_phase_deadline(room),
+        server_now=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -471,6 +472,7 @@ def voting_page(code: str):
         voters_count=len(voters),
         participants_count=len(participants),
         phase_deadline=_phase_deadline(room),
+        server_now=datetime.now(timezone.utc).isoformat(),
     )
 
 
