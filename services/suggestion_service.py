@@ -149,3 +149,18 @@ def get_suggestion_counts(room_id: str) -> dict[str, int]:
         name = s["participant_name"]
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+def has_everyone_suggested(
+    room_id: str,
+    participants: list[dict],
+    suggestions_per_person: int,
+) -> bool:
+    """Return True if every participant has hit their cap AND total >= 2."""
+    if not participants:
+        return False
+    counts = get_suggestion_counts(room_id)
+    all_names = {p["display_name"] for p in participants}
+    if not all(counts.get(name, 0) >= suggestions_per_person for name in all_names):
+        return False
+    return sum(counts.values()) >= 2

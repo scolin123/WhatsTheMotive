@@ -24,6 +24,7 @@ from services.suggestion_service import (
     get_suggestions_by_participant,
     get_suggestion_by_id,
     save_ai_description,
+    has_everyone_suggested,
 )
 from services.ai_service import generate_suggestion_description
 from services.voting_service import (
@@ -359,6 +360,16 @@ def suggestions_submit(code: str):
         add_suggestion(room_id=room["id"], participant_name=display_name, text=text)
     except ValueError as e:
         flash(str(e), "error")
+        return redirect(url_for("suggestions_page", code=code))
+
+    # Auto-advance if this was the last submission needed
+    participants = get_participants(room["id"])
+    if has_everyone_suggested(room["id"], participants, room["suggestions_per_person"]):
+        try:
+            update_phase(room["id"], "voting")
+        except (ValueError, RuntimeError):
+            pass  # poll will catch it
+        return redirect(url_for("voting_page", code=code))
 
     return redirect(url_for("suggestions_page", code=code))
 
@@ -577,8 +588,19 @@ def api_participants(code: str):
     voters          = get_voters(room["id"]) if room["phase"] == "voting" else []
     all_suggestions = get_suggestions(room["id"]) if room["phase"] == "suggesting" else []
 
-    # Auto-advance to results if everyone has voted but phase wasn't updated
     current_phase = room["phase"]
+
+    # Auto-advance to voting if everyone has submitted their max suggestions
+    if current_phase == "suggesting" and has_everyone_suggested(
+        room["id"], participants, room["suggestions_per_person"]
+    ):
+        try:
+            update_phase(room["id"], "voting")
+            current_phase = "voting"
+        except (ValueError, RuntimeError):
+            pass
+
+    # Auto-advance to results if everyone has voted but phase wasn't updated
     if current_phase == "voting" and has_everyone_voted(room["id"], participants):
         try:
             update_phase(room["id"], "results")
