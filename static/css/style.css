@@ -1173,6 +1173,8 @@ body {
   gap:            0.5rem;
 }
 
+.results-item[hidden] { display: none; }
+
 .results-item {
   display:       flex;
   align-items:   center;
