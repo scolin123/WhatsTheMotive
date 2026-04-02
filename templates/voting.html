@@ -18,8 +18,14 @@
         </p>
       </div>
 
-      <div class="phase-pill">
-        {{ room.get('phase', 'voting')|capitalize }}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
+        <div class="phase-pill">
+          {{ room.get('phase', 'voting')|capitalize }}
+        </div>
+        <div class="stat-card" style="text-align:right;min-width:7rem;">
+          <span class="stat-card__value" id="phase-timer">--:--</span>
+          <span class="stat-card__label">remaining</span>
+        </div>
       </div>
     </div>
 
@@ -61,7 +67,8 @@
           {{ {
             "roomCode": room.get("room_code", ""),
             "participantsCount": participants_count,
-            "votersCount": voters_count
+            "votersCount": voters_count,
+            "phaseDeadline": phase_deadline
           } | tojson }}
         </script>
 

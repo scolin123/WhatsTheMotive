@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from better_profanity import profanity
 from flask import (
     Flask,
@@ -50,6 +51,16 @@ VOTING_METHODS = {
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+def _phase_deadline(room: dict) -> str | None:
+    """Return the ISO deadline for the current timed phase, or None."""
+    started = room.get("phase_started_at")
+    if not started:
+        return None
+    timer_secs = min(room.get("suggestions_per_person", 1), 5) * 60
+    dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    return (dt + timedelta(seconds=timer_secs)).isoformat()
+
 
 def _require_session(code: str):
     """
@@ -306,6 +317,7 @@ def suggestions_page(code: str):
         slots_total=slots_total,
         slots_remaining=slots_remaining,
         participants=participants,
+        phase_deadline=_phase_deadline(room),
     )
 
 
@@ -458,6 +470,7 @@ def voting_page(code: str):
         has_voted=has_voted,
         voters_count=len(voters),
         participants_count=len(participants),
+        phase_deadline=_phase_deadline(room),
     )
 
 
@@ -588,23 +601,33 @@ def api_participants(code: str):
     voters          = get_voters(room["id"]) if room["phase"] == "voting" else []
     all_suggestions = get_suggestions(room["id"]) if room["phase"] == "suggesting" else []
 
-    current_phase = room["phase"]
+    current_phase  = room["phase"]
+    phase_deadline = _phase_deadline(room)
+    timer_expired  = (
+        phase_deadline is not None
+        and datetime.now(timezone.utc) >= datetime.fromisoformat(phase_deadline)
+    )
 
-    # Auto-advance to voting if everyone has submitted their max suggestions
-    if current_phase == "suggesting" and has_everyone_suggested(
-        room["id"], participants, room["suggestions_per_person"]
+    # Auto-advance to voting if everyone submitted or timer expired
+    if current_phase == "suggesting" and (
+        timer_expired or has_everyone_suggested(room["id"], participants, room["suggestions_per_person"])
     ):
         try:
             update_phase(room["id"], "voting")
-            current_phase = "voting"
+            current_phase  = "voting"
+            phase_deadline = None
+            timer_expired  = False
         except (ValueError, RuntimeError):
             pass
 
-    # Auto-advance to results if everyone has voted but phase wasn't updated
-    if current_phase == "voting" and has_everyone_voted(room["id"], participants):
+    # Auto-advance to results if everyone voted or timer expired
+    if current_phase == "voting" and (
+        timer_expired or has_everyone_voted(room["id"], participants)
+    ):
         try:
             update_phase(room["id"], "results")
-            current_phase = "results"
+            current_phase  = "results"
+            phase_deadline = None
         except (ValueError, RuntimeError):
             pass
 
@@ -616,6 +639,7 @@ def api_participants(code: str):
         "all_suggestions":    all_suggestions,
         "voting_method":      room.get("voting_method", "borda"),
         "results_anonymous":  room.get("results_anonymous", True),
+        "phase_deadline":     phase_deadline,
     })
 
 

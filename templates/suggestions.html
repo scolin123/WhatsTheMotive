@@ -7,7 +7,8 @@
 <script id="page-data" type="application/json">
   {
     "roomCode":       {{ room.room_code | tojson }},
-    "slotsRemaining": {{ slots_remaining | tojson }}
+    "slotsRemaining": {{ slots_remaining | tojson }},
+    "phaseDeadline":  {{ phase_deadline | tojson }}
   }
 </script>
 
@@ -37,6 +38,10 @@
     <div class="stat-card">
       <span class="stat-card__value" id="slots-remaining">{{ slots_remaining }}</span>
       <span class="stat-card__label">suggestion{{ 's' if slots_remaining != 1 else '' }} left</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__value" id="phase-timer">--:--</span>
+      <span class="stat-card__label">remaining</span>
     </div>
   </div>
 
@@ -172,6 +177,26 @@
   const ROOM_CODE = PAGE_DATA.roomCode;
   const POLL_MS   = 3000;
 
+  // ── Countdown timer ────────────────────────────────────────────
+  let deadline = PAGE_DATA.phaseDeadline ? new Date(PAGE_DATA.phaseDeadline) : null;
+  const timerEl = document.getElementById('phase-timer');
+
+  function updateTimer() {
+    if (!deadline || !timerEl) return;
+    const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    timerEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    timerEl.classList.toggle('timer--urgent', remaining <= 30 && remaining > 0);
+    if (remaining === 0) {
+      timerEl.textContent = '00:00';
+      refreshSuggestions();
+    }
+  }
+
+  setInterval(updateTimer, 1000);
+  updateTimer();
+
   // ── Copy room code ───────────────────────────────────────────────
   function copyCode() {
     if (!navigator.clipboard) return;
@@ -209,6 +234,9 @@
       console.warn('[WTM] Suggestion poll failed:', err);
       return;
     }
+
+    // Sync deadline from server
+    if (data.phase_deadline) deadline = new Date(data.phase_deadline);
 
     // Redirect guests when host starts voting
     if (data.phase && data.phase === 'voting') {

@@ -504,6 +504,10 @@ body {
   color:     var(--text-muted);
 }
 
+.timer--urgent {
+  color: var(--error, #e53935);
+}
+
 /* ── Participant list card ───────────────────────────────────── */
 .participants-card {
   background:    var(--bg-card);

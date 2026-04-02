@@ -1,5 +1,6 @@
 import random
 import string
+from datetime import datetime, timezone
 from services.supabase_client import supabase
 
 
@@ -106,9 +107,15 @@ def update_phase(room_id: str, phase: str) -> dict:
     if not existing.data:
         raise ValueError(f"No room found with id '{room_id}'.")
 
+    update_data: dict = {"phase": phase}
+    if phase in ("suggesting", "voting"):
+        update_data["phase_started_at"] = datetime.now(timezone.utc).isoformat()
+    else:
+        update_data["phase_started_at"] = None
+
     resp = (
         supabase.table("rooms")
-        .update({"phase": phase})
+        .update(update_data)
         .eq("id", room_id)
         .execute()
     )

@@ -20,6 +20,26 @@
   const POLL_MS = 3000;
   let draggedItem = null;
 
+  // ── Countdown timer ────────────────────────────────────────────
+  let deadline = pageData.phaseDeadline ? new Date(pageData.phaseDeadline) : null;
+  const timerEl = document.getElementById("phase-timer");
+
+  function updateTimer() {
+    if (!deadline || !timerEl) return;
+    const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    timerEl.classList.toggle("timer--urgent", remaining <= 30 && remaining > 0);
+    if (remaining === 0) {
+      timerEl.textContent = "00:00";
+      pollStatus();
+    }
+  }
+
+  setInterval(updateTimer, 1000);
+  updateTimer();
+
   function getRankItems() {
     return Array.from(rankingList.querySelectorAll(".rank-item"));
   }
@@ -175,6 +195,8 @@
       if (!response.ok) return;
 
       const data = await response.json();
+
+      if (data.phase_deadline) deadline = new Date(data.phase_deadline);
 
       if (data.phase === "results") {
         window.location.href = `/room/${ROOM_CODE}/results`;
