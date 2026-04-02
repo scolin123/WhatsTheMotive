@@ -22,11 +22,13 @@
 
   // ── Countdown timer ────────────────────────────────────────────
   let deadline = pageData.phaseDeadline ? new Date(pageData.phaseDeadline) : null;
+  let serverOffset = 0; // ms difference: server clock - local clock
   const timerEl = document.getElementById("phase-timer");
 
   function updateTimer() {
     if (!deadline || !timerEl) return;
-    const remaining = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+    const nowServer = Date.now() + serverOffset;
+    const remaining = Math.max(0, Math.floor((deadline - nowServer) / 1000));
     const m = Math.floor(remaining / 60);
     const s = remaining % 60;
     timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -196,6 +198,7 @@
 
       const data = await response.json();
 
+      if (data.server_now) serverOffset = new Date(data.server_now) - Date.now();
       if (data.phase_deadline) deadline = new Date(data.phase_deadline);
 
       if (data.phase === "results") {

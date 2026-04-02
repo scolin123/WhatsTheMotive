@@ -640,6 +640,7 @@ def api_participants(code: str):
         "voting_method":      room.get("voting_method", "borda"),
         "results_anonymous":  room.get("results_anonymous", True),
         "phase_deadline":     phase_deadline,
+        "server_now":         datetime.now(timezone.utc).isoformat(),
     })
 
 
