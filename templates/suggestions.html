@@ -2,6 +2,8 @@
 
 {% block title %}Suggestions — {{ room.title }} — WTM{% endblock %}
 
+{% block nav_timer %}<span id="phase-timer" class="nav-timer">--:--</span>{% endblock %}
+
 {% block content %}
 
 <script id="page-data" type="application/json">
@@ -38,10 +40,6 @@
     <div class="stat-card">
       <span class="stat-card__value" id="slots-remaining">{{ slots_remaining }}</span>
       <span class="stat-card__label">suggestion{{ 's' if slots_remaining != 1 else '' }} left</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-card__value" id="phase-timer">--:--</span>
-      <span class="stat-card__label">remaining</span>
     </div>
   </div>
 

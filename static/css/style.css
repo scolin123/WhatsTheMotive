@@ -105,6 +105,10 @@ body {
   justify-content: space-between;
   padding:         1.25rem 1.5rem;
   border-bottom:   1px solid var(--border);
+  position:        sticky;
+  top:             0;
+  z-index:         100;
+  background:      var(--bg);
 }
 
 .site-nav__brand {
@@ -504,8 +508,23 @@ body {
   color:     var(--text-muted);
 }
 
-.timer--urgent {
-  color: var(--error, #e53935);
+.nav-timer {
+  font-family:   var(--font-display);
+  font-size:     1rem;
+  font-weight:   800;
+  letter-spacing: -0.02em;
+  background:    var(--bg-card);
+  border:        1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding:       0.25rem 0.75rem;
+  color:         var(--text);
+  min-width:     4.5rem;
+  text-align:    center;
+}
+
+.nav-timer.timer--urgent {
+  color:        var(--error, #e53935);
+  border-color: var(--error, #e53935);
 }
 
 /* ── Participant list card ───────────────────────────────────── */
