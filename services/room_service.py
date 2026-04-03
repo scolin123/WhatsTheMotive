@@ -113,7 +113,7 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
 
     resp = (
         supabase.table("rooms")
-        .select("room_code, title, phase, host_lat, host_lng")
+        .select("room_code, title, host_name, phase, host_lat, host_lng")
         .eq("phase", "lobby")
         .not_.is_("host_lat", "null")
         .not_.is_("host_lng", "null")
@@ -126,6 +126,7 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
         if dist <= radius_km:
             results.append({
                 "title":       room["title"],
+                "host_name":   room["host_name"],
                 "code":        room["room_code"],
                 "distance_km": round(dist, 2),
             })

@@ -61,9 +61,10 @@
           var list    = document.getElementById('nearby-list');
 
           list.innerHTML = data.rooms.map(function (room) {
+            var displayName = escapeHtml(room.host_name) + "'s " + escapeHtml(room.title);
             return '<li class="nearby-item">' +
               '<div class="nearby-item__info">' +
-                '<span class="nearby-item__title">' + escapeHtml(room.title) + '</span>' +
+                '<span class="nearby-item__title">' + displayName + '</span>' +
                 '<span class="nearby-item__meta">Code: ' + escapeHtml(room.code) + '</span>' +
               '</div>' +
               '<a href="/join?code=' + encodeURIComponent(room.code) + '" class="btn btn--primary btn--small">Join</a>' +
