@@ -681,6 +681,18 @@ def api_participants(code: str):
         except (ValueError, RuntimeError):
             pass
 
+    # Expire lobby rooms where only the host is present after 10 minutes
+    if current_phase == "lobby" and len(participants) == 1:
+        created_at_str = room.get("created_at", "")
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - created_at > timedelta(minutes=10):
+                    update_phase(room["id"], "expired")
+                    current_phase = "expired"
+            except (ValueError, RuntimeError):
+                pass
+
     return jsonify({
         "phase":              current_phase,
         "participants":       participants,

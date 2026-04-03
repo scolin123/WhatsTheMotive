@@ -136,7 +136,7 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
 
 def update_phase(room_id: str, phase: str) -> dict:
     """Advance a room to a new phase."""
-    valid_phases = {"lobby", "suggesting", "voting", "results"}
+    valid_phases = {"lobby", "suggesting", "voting", "results", "expired"}
     if phase not in valid_phases:
         raise ValueError(f"Invalid phase '{phase}'. Must be one of: {sorted(valid_phases)}.")
 
