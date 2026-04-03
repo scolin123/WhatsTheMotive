@@ -40,6 +40,8 @@ def create_room(
     suggestions_per_person: int,
     results_anonymous: bool = True,
     voting_method: str = "borda",
+    host_lat: float | None = None,
+    host_lng: float | None = None,
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
@@ -58,16 +60,21 @@ def create_room(
 
     code = _unique_code()
 
-    room_resp = supabase.table("rooms").insert({
-        "room_code":             code,
-        "host_name":             host_name,
-        "title":                 title,
-        "max_participants":      max_participants,
+    room_data = {
+        "room_code":              code,
+        "host_name":              host_name,
+        "title":                  title,
+        "max_participants":       max_participants,
         "suggestions_per_person": suggestions_per_person,
-        "phase":                 "lobby",
-        "results_anonymous":     results_anonymous,
-        "voting_method":         voting_method,
-    }).execute()
+        "phase":                  "lobby",
+        "results_anonymous":      results_anonymous,
+        "voting_method":          voting_method,
+    }
+    if host_lat is not None and host_lng is not None:
+        room_data["host_lat"] = host_lat
+        room_data["host_lng"] = host_lng
+
+    room_resp = supabase.table("rooms").insert(room_data).execute()
 
     if not room_resp.data:
         raise RuntimeError("Failed to create room — Supabase returned no data.")
@@ -95,6 +102,35 @@ def get_room_by_code(room_code: str) -> dict | None:
         .execute()
     )
     return resp.data[0] if resp.data else None
+
+
+def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dict]:
+    """
+    Return rooms in the lobby phase whose host location is within radius_km of (lat, lng).
+    Only rooms where the host opted in by storing coordinates are considered.
+    """
+    from utils.helpers import haversine_km
+
+    resp = (
+        supabase.table("rooms")
+        .select("room_code, title, phase, host_lat, host_lng")
+        .eq("phase", "lobby")
+        .not_.is_("host_lat", "null")
+        .not_.is_("host_lng", "null")
+        .execute()
+    )
+
+    results = []
+    for room in (resp.data or []):
+        dist = haversine_km(lat, lng, room["host_lat"], room["host_lng"])
+        if dist <= radius_km:
+            results.append({
+                "title":       room["title"],
+                "code":        room["room_code"],
+                "distance_km": round(dist, 2),
+            })
+
+    return sorted(results, key=lambda r: r["distance_km"])
 
 
 def update_phase(room_id: str, phase: str) -> dict:

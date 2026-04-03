@@ -13,6 +13,7 @@ from flask import (
 from config import Config
 from services.room_service import (
     create_room,
+    get_nearby_rooms,
     get_room_by_code,
     add_participant,
     get_participants,
@@ -102,6 +103,18 @@ def create_room_submit():
     voting_method        = request.form.get("voting_method", "borda")
     res_anon = request.form.get("results_anonymous") == "on"
 
+    host_lat = host_lng = None
+    raw_lat  = request.form.get("host_lat", "").strip()
+    raw_lng  = request.form.get("host_lng", "").strip()
+    if raw_lat and raw_lng:
+        try:
+            host_lat = float(raw_lat)
+            host_lng = float(raw_lng)
+            if not (-90 <= host_lat <= 90) or not (-180 <= host_lng <= 180):
+                host_lat = host_lng = None
+        except ValueError:
+            host_lat = host_lng = None
+
     errors = []
     if not host_name:
         errors.append("Your name is required.")
@@ -138,7 +151,9 @@ def create_room_submit():
             max_participants=max_participants,
             suggestions_per_person=suggestions_per_person,
             results_anonymous=res_anon,
-            voting_method=voting_method  # Pass the method here
+            voting_method=voting_method,
+            host_lat=host_lat,
+            host_lng=host_lng,
         )
     except (ValueError, RuntimeError) as e:
         flash(str(e), "error")
@@ -713,6 +728,30 @@ def api_describe_suggestion(code: str, suggestion_id: str):
         pass
 
     return jsonify({"description": description})
+
+
+@app.route("/api/nearby-rooms")
+def api_nearby_rooms():
+    """
+    GET /api/nearby-rooms?lat=<float>&lng=<float>
+    Returns lobby-phase rooms whose host is within 1 km of the given coordinates.
+    """
+    raw_lat = request.args.get("lat", "").strip()
+    raw_lng = request.args.get("lng", "").strip()
+
+    if not raw_lat or not raw_lng:
+        return jsonify({"error": "lat and lng query parameters are required."}), 400
+
+    try:
+        lat = float(raw_lat)
+        lng = float(raw_lng)
+    except ValueError:
+        return jsonify({"error": "lat and lng must be valid numbers."}), 400
+
+    if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+        return jsonify({"error": "Coordinates out of valid range."}), 400
+
+    return jsonify({"rooms": get_nearby_rooms(lat, lng)})
 
 
 # ---------------------------------------------------------------------------

@@ -25,4 +25,58 @@
   </div>
 
 </div>
+
+<section id="nearby-section" class="nearby-section" hidden>
+  <div class="nearby-section__inner">
+    <h2 class="nearby-section__heading">Rooms near you</h2>
+    <ul id="nearby-list" class="nearby-list"></ul>
+  </div>
+</section>
+
+<script>
+  (function () {
+    if (!navigator.geolocation) return;
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+
+        fetch('/api/nearby-rooms?lat=' + lat + '&lng=' + lng, {
+          headers: { 'Accept': 'application/json' }
+        })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.rooms || data.rooms.length === 0) return;
+
+          var section = document.getElementById('nearby-section');
+          var list    = document.getElementById('nearby-list');
+
+          list.innerHTML = data.rooms.map(function (room) {
+            return '<li class="nearby-item">' +
+              '<div class="nearby-item__info">' +
+                '<span class="nearby-item__title">' + escapeHtml(room.title) + '</span>' +
+                '<span class="nearby-item__meta">Code: ' + escapeHtml(room.code) + '</span>' +
+              '</div>' +
+              '<a href="/join?code=' + encodeURIComponent(room.code) + '" class="btn btn--primary btn--small">Join</a>' +
+            '</li>';
+          }).join('');
+
+          section.hidden = false;
+        })
+        .catch(function () {});
+      },
+      function () {},
+      { timeout: 8000, maximumAge: 300000 }
+    );
+  })();
+</script>
 {% endblock %}

@@ -1374,3 +1374,70 @@ body {
 /* ── suggestion-item: column layout so panel spans full width ─ */
 .suggestion-item              { flex-direction: column; align-items: stretch; }
 .suggestion-item-row          { display: flex; align-items: center; gap: 0.75rem; width: 100%; }
+/* ── Nearby rooms section (index.html) ───────────────────────── */
+.nearby-section {
+  display:         flex;
+  justify-content: center;
+  padding:         0 1.5rem 3rem;
+}
+
+.nearby-section__inner {
+  width:     100%;
+  max-width: 560px;
+}
+
+.nearby-section__heading {
+  font-size:      0.85rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color:          var(--text-muted);
+  margin-bottom:  0.85rem;
+}
+
+.nearby-list {
+  list-style:     none;
+  padding:        0;
+  margin:         0;
+  display:        flex;
+  flex-direction: column;
+  gap:            0.6rem;
+}
+
+.nearby-item {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             1rem;
+  padding:         0.85rem 1rem;
+  background:      var(--bg-card);
+  border:          1px solid var(--border);
+  border-radius:   var(--radius);
+  animation:       fadeSlideIn 0.22s ease;
+}
+
+.nearby-item__info {
+  display:        flex;
+  flex-direction: column;
+  gap:            0.2rem;
+  min-width:      0;
+}
+
+.nearby-item__title {
+  font-size:     0.95rem;
+  font-weight:   600;
+  color:         var(--text);
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.nearby-item__meta {
+  font-size: 0.75rem;
+  color:     var(--text-faint);
+}
+
+.btn--small {
+  padding:   0.45rem 0.9rem;
+  font-size: 0.82rem;
+}
