@@ -26,6 +26,8 @@ from services.suggestion_service import (
     get_suggestion_by_id,
     save_ai_description,
     has_everyone_suggested,
+    mark_suggestions_done,
+    get_done_participants,
 )
 from services.ai_service import generate_suggestion_description
 from services.voting_service import (
@@ -306,6 +308,8 @@ def suggestions_page(code: str):
     slots_remaining = max(0, slots_total - slots_used)
 
     participants = get_participants(room["id"])
+    done_participants = get_done_participants(room["id"])
+    suggestions_done = display_name in done_participants
     return render_template(
         "suggestions.html",
         room=room,
@@ -317,6 +321,7 @@ def suggestions_page(code: str):
         slots_total=slots_total,
         slots_remaining=slots_remaining,
         participants=participants,
+        suggestions_done=suggestions_done,
         phase_deadline=_phase_deadline(room),
         server_now=datetime.now(timezone.utc).isoformat(),
     )
@@ -382,6 +387,34 @@ def suggestions_submit(code: str):
             update_phase(room["id"], "voting")
         except (ValueError, RuntimeError):
             pass  # poll will catch it
+        return redirect(url_for("voting_page", code=code))
+
+    return redirect(url_for("suggestions_page", code=code))
+
+
+@app.route("/room/<code>/suggestions/done", methods=["POST"])
+def suggestions_done_route(code: str):
+    display_name, _ = _require_session(code)
+    if display_name is None:
+        return redirect(url_for("join_room_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room or room["phase"] != "suggesting":
+        return redirect(url_for("suggestions_page", code=code))
+
+    my_suggestions = get_suggestions_by_participant(room["id"], display_name)
+    if len(my_suggestions) < 1:
+        flash("You must add at least one suggestion before finishing early.", "error")
+        return redirect(url_for("suggestions_page", code=code))
+
+    mark_suggestions_done(room["id"], display_name)
+
+    participants = get_participants(room["id"])
+    if has_everyone_suggested(room["id"], participants, room["suggestions_per_person"]):
+        try:
+            update_phase(room["id"], "voting")
+        except (ValueError, RuntimeError):
+            pass
         return redirect(url_for("voting_page", code=code))
 
     return redirect(url_for("suggestions_page", code=code))

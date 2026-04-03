@@ -61,7 +61,7 @@
       {% endif %}
     {% endwith %}
 
-    {% if slots_remaining > 0 %}
+    {% if slots_remaining > 0 and not suggestions_done %}
       <form
         class="form suggestion-form"
         method="POST"
@@ -84,9 +84,17 @@
           </div>
         </div>
       </form>
+      {% if slots_used >= 1 %}
+        <form method="POST" action="{{ url_for('suggestions_done_route', code=room.room_code) }}" style="margin-top: 0.75rem;">
+          <button class="btn btn--secondary btn--full" type="submit">Done suggestions</button>
+        </form>
+      {% endif %}
+    {% elif suggestions_done %}
+      <div class="suggestions-done-banner">
+        <p>You've finished adding suggestions early.</p>
+      </div>
     {% else %}
       <div class="suggestions-done-banner">
-        
         <p>You've submitted all your suggestions!</p>
       </div>
     {% endif %}
