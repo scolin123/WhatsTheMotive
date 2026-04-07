@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from services.supabase_client import supabase
 
 
@@ -111,12 +111,15 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
     """
     from utils.helpers import haversine_km
 
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+
     resp = (
         supabase.table("rooms")
         .select("room_code, title, host_name, phase, host_lat, host_lng")
         .eq("phase", "lobby")
         .not_.is_("host_lat", "null")
         .not_.is_("host_lng", "null")
+        .gte("created_at", cutoff)
         .execute()
     )
 
