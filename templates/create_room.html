@@ -137,6 +137,43 @@
         </div>
       </div>
 
+      <div class="form__group">
+        <label class="form__label">Room Mode</label>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <input
+              type="radio"
+              name="room_mode"
+              value="open"
+              id="mode-open"
+              style="margin-top: 3px; flex-shrink: 0;"
+              {% if (form_data | default({})).get('room_mode', 'open') != 'preset' %}checked{% endif %}
+            >
+            <span style="display: flex; flex-direction: column; gap: 4px;">
+              <strong>Open</strong>
+              <span class="form__hint">Everyone submits suggestions, then votes.</span>
+            </span>
+          </label>
+
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <input
+              type="radio"
+              name="room_mode"
+              value="preset"
+              id="mode-preset"
+              style="margin-top: 3px; flex-shrink: 0;"
+              {% if (form_data | default({})).get('room_mode') == 'preset' %}checked{% endif %}
+            >
+            <span style="display: flex; flex-direction: column; gap: 4px;">
+              <strong>Preset</strong>
+              <span class="form__hint">You enter all the options. Participants only vote.</span>
+            </span>
+          </label>
+
+        </div>
+      </div>
+
       <button class="btn btn--primary btn--full" type="submit">
         <span class="btn__icon">✦</span> Create Room
       </button>
@@ -144,4 +181,24 @@
     </form>
   </div>
 </div>
+
+<script>
+  // Find the suggestions-per-person row (it lives inside .form__row)
+  const sppInput = document.getElementById('suggestions_per_person');
+  const sppRow   = sppInput ? sppInput.closest('.form__row') : null;
+
+  function toggleSpp() {
+    const isPreset = document.getElementById('mode-preset').checked;
+    if (sppRow) sppRow.style.display = isPreset ? 'none' : '';
+    if (sppInput) sppInput.required = !isPreset;
+  }
+
+  document.querySelectorAll('input[name="room_mode"]').forEach(r =>
+    r.addEventListener('change', toggleSpp)
+  );
+
+  // Run once on page load (handles form_data repopulation after validation error)
+  toggleSpp();
+</script>
+
 {% endblock %}

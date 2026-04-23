@@ -82,10 +82,12 @@
             </span>
           </div>
 
+          {% if room.room_mode != 'preset' %}
           <div class="info-item">
             <span class="info-label">Suggestions Each</span>
             <span class="info-value">{{ room.suggestions_per_person }}</span>
           </div>
+          {% endif %}
         </div>
 
         {# ── Avatar picker trigger ── #}
@@ -138,11 +140,19 @@
       {% if is_host %}
         <div class="action-card">
           <p class="action-text">
-            You are the host. Once everyone has joined, you'll be able to start the suggestions phase.
+            {% if room.room_mode == 'preset' %}
+              You are the host. Once everyone has joined, enter your options and start voting.
+            {% else %}
+              You are the host. Once everyone has joined, you'll be able to start the suggestions phase.
+            {% endif %}
           </p>
           <form method="POST" action="{{ url_for('start_suggestions', code=room.room_code) }}">
             <button type="submit" class="btn btn--primary" id="start-btn">
-              Start Suggestions
+              {% if room.room_mode == 'preset' %}
+                Enter Options
+              {% else %}
+                Start Suggestions
+              {% endif %}
             </button>
           </form>
         </div>

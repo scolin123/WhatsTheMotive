@@ -7,7 +7,9 @@
 <script id="page-data" type="application/json">
   {
     "roomCode":       {{ room.room_code | tojson }},
-    "slotsRemaining": {{ slots_remaining | tojson }}
+    "slotsRemaining": {{ slots_remaining | tojson }},
+    "roomMode":       {{ room.room_mode | tojson }},
+    "isHost":         {{ is_host | tojson }}
   }
 </script>
 
@@ -28,22 +30,31 @@
     </div>
   </div>
 
-  {# ── Stats row ─────────────────────────────────────────────────── #}
+  {# ── Stats row — only shown to host in preset mode, always shown in open mode #}
+  {% if room.room_mode == 'open' or is_host %}
   <div class="lobby-stats">
     <div class="stat-card">
       <span class="stat-card__value">{{ slots_used }}</span>
       <span class="stat-card__label">of {{ slots_total }} submitted</span>
     </div>
+    {% if room.room_mode == 'open' %}
     <div class="stat-card">
       <span class="stat-card__value" id="slots-remaining">{{ slots_remaining }}</span>
       <span class="stat-card__label">suggestion{{ 's' if slots_remaining != 1 else '' }} left</span>
     </div>
+    {% endif %}
   </div>
+  {% endif %}
 
-  {# ── Suggestion form ───────────────────────────────────────────── #}
+  {# ── Suggestion form (host always) / waiting banner (participants in preset mode) ── #}
+  {% if room.room_mode == 'open' or is_host %}
   <div class="participants-card">
     <h3 class="participants-card__heading">
-      Your Suggestions
+      {% if room.room_mode == 'preset' %}
+        Options
+      {% else %}
+        Your Suggestions
+      {% endif %}
       <span class="participants-card__count">{{ display_name }}</span>
     </h3>
 
@@ -64,14 +75,16 @@
         action="{{ url_for('suggestions_submit', code=room.room_code) }}"
       >
         <div class="form__group">
-          <label class="form__label" for="suggestion_text">Add a suggestion</label>
+          <label class="form__label" for="suggestion_text">
+            {% if room.room_mode == 'preset' %}Add an option{% else %}Add a suggestion{% endif %}
+          </label>
           <div class="suggestion-input-row">
             <input
               class="form__input"
               type="text"
               id="suggestion_text"
               name="suggestion_text"
-              placeholder="Your Suggestion...!"
+              placeholder="{% if room.room_mode == 'preset' %}e.g. The Blarney Stone{% else %}Your Suggestion...!{% endif %}"
               required
               autocomplete="off"
               maxlength="120"
@@ -105,6 +118,24 @@
     {% endif %}
 
   </div>
+  {% else %}
+  {# ── Participant read-only view in preset mode ── #}
+  <div class="participants-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages" style="margin-bottom: 1rem;">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    <div class="suggestions-done-banner">
+      <span>⏳</span>
+      <p>{{ room.host_name }} is finalising the options. You'll be able to vote shortly.</p>
+    </div>
+  </div>
+  {% endif %}
 
   {# ── All suggestions — IDs added for JS polling ────────────────── #}
   <div class="participants-card">
@@ -147,11 +178,20 @@
     <div class="lobby-footer">
       <div class="host-controls">
         <p class="host-controls__hint">
-          When everyone has submitted, close suggestions and move to voting.
+          {% if room.room_mode == 'preset' %}
+            When you've added all the options, lock them in and open voting.
+          {% else %}
+            When everyone has submitted, close suggestions and move to voting.
+          {% endif %}
         </p>
         <form method="POST" action="{{ url_for('start_voting', code=room.room_code) }}">
           <button class="btn btn--primary btn--full" type="submit">
-            <span class="btn__icon">▶</span> Close Suggestions &amp; Start Voting
+            <span class="btn__icon">▶</span>
+            {% if room.room_mode == 'preset' %}
+              Lock Options &amp; Start Voting
+            {% else %}
+              Close Suggestions &amp; Start Voting
+            {% endif %}
           </button>
         </form>
       </div>

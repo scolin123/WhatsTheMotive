@@ -84,8 +84,11 @@ def create_room_submit():
     title                = request.form.get("title", "").strip()
     max_participants_raw = request.form.get("max_participants", "").strip()
     spp_raw              = request.form.get("suggestions_per_person", "").strip()
-    # Get the selected voting method from the radio buttons
-    voting_method        = request.form.get("voting_method", "borda")
+    # Get the selected voting method and room mode from the radio buttons
+    voting_method = request.form.get("voting_method", "borda")
+    room_mode     = request.form.get("room_mode", "open")
+    if room_mode not in ("open", "preset"):
+        room_mode = "open"
     res_anon = request.form.get("results_anonymous") == "on"
 
     errors = []
@@ -104,13 +107,14 @@ def create_room_submit():
         errors.append("Max participants must be a whole number.")
 
     suggestions_per_person = None
-    try:
-        suggestions_per_person = int(spp_raw)
-        if suggestions_per_person < 1:
-            errors.append("Suggestions per person must be at least 1.")
-            suggestions_per_person = None
-    except ValueError:
-        errors.append("Suggestions per person must be a whole number.")
+    if room_mode == "open":
+        try:
+            suggestions_per_person = int(spp_raw)
+            if suggestions_per_person < 1:
+                errors.append("Suggestions per person must be at least 1.")
+                suggestions_per_person = None
+        except ValueError:
+            errors.append("Suggestions per person must be a whole number.")
 
     if errors:
         for e in errors:
@@ -124,7 +128,8 @@ def create_room_submit():
             max_participants=max_participants,
             suggestions_per_person=suggestions_per_person,
             results_anonymous=res_anon,
-            voting_method=voting_method  # Pass the method here
+            voting_method=voting_method,
+            room_mode=room_mode,
         )
     except (ValueError, RuntimeError) as e:
         flash(str(e), "error")
@@ -290,8 +295,11 @@ def suggestions_page(code: str):
     my_suggestions  = get_suggestions_by_participant(room["id"], display_name)
     all_suggestions = get_suggestions(room["id"])
     slots_used      = len(my_suggestions)
-    slots_total     = room["suggestions_per_person"]
-    slots_remaining = max(0, slots_total - slots_used)
+    slots_total     = room.get("suggestions_per_person") or 0
+    if room.get("room_mode") == "preset":
+        slots_remaining = 999  # host has no cap in preset mode
+    else:
+        slots_remaining = max(0, slots_total - slots_used)
 
     participants = get_participants(room["id"])
     return render_template(
@@ -345,6 +353,11 @@ def suggestions_submit(code: str):
     if not room:
         flash("Room not found.", "error")
         return redirect(url_for("home"))
+
+    # In preset mode, only the host may submit options
+    if room.get("room_mode") == "preset" and not session.get("is_host"):
+        flash("This room is in preset mode. Only the host can add options.", "error")
+        return redirect(url_for("suggestions_page", code=code))
 
     text = request.form.get("suggestion_text", "").strip()
     if not text:

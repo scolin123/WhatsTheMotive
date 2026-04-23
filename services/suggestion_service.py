@@ -31,10 +31,10 @@ def add_suggestion(room_id: str, participant_name: str, text: str) -> dict:
     if not participant_name:
         raise ValueError("participant_name cannot be blank.")
 
-    # Fetch room to check phase and suggestions_per_person cap
+    # Fetch room to check phase, mode, and suggestions_per_person cap
     room_resp = (
         supabase.table("rooms")
-        .select("phase, suggestions_per_person")
+        .select("phase, suggestions_per_person, room_mode, host_name")
         .eq("id", room_id)
         .execute()
     )
@@ -46,13 +46,18 @@ def add_suggestion(room_id: str, participant_name: str, text: str) -> dict:
     if room["phase"] != "suggesting":
         raise ValueError("Suggestions are not open for this room right now.")
 
-    # Count how many suggestions this participant has already submitted
-    existing = get_suggestions_by_participant(room_id, participant_name)
-    if len(existing) >= room["suggestions_per_person"]:
-        raise ValueError(
-            f"You've already submitted all {room['suggestions_per_person']} "
-            f"of your suggestion(s)."
-        )
+    # In preset mode only the host may add options
+    if room.get("room_mode") == "preset" and participant_name != room.get("host_name"):
+        raise ValueError("This room is in preset mode. Only the host can add options.")
+
+    # In open mode, enforce the per-person cap
+    if room.get("room_mode", "open") == "open":
+        existing = get_suggestions_by_participant(room_id, participant_name)
+        if len(existing) >= room["suggestions_per_person"]:
+            raise ValueError(
+                f"You've already submitted all {room['suggestions_per_person']} "
+                f"of your suggestion(s)."
+            )
 
     resp = (
         supabase.table("suggestions")
