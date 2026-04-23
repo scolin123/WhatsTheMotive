@@ -154,3 +154,42 @@ def get_suggestion_counts(room_id: str) -> dict[str, int]:
         name = s["participant_name"]
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+def mark_suggestions_done(room_id: str, participant_name: str) -> None:
+    """Record that a participant has opted out of their remaining suggestion slots."""
+    supabase.table("suggestions_done").upsert(
+        {"room_id": room_id, "participant_name": participant_name},
+        on_conflict="room_id,participant_name",
+    ).execute()
+
+
+def get_done_participants(room_id: str) -> set[str]:
+    """Return the set of participant names who have marked themselves done early."""
+    resp = (
+        supabase.table("suggestions_done")
+        .select("participant_name")
+        .eq("room_id", room_id)
+        .execute()
+    )
+    return {r["participant_name"] for r in (resp.data or [])}
+
+
+def has_everyone_suggested(
+    room_id: str,
+    participants: list[dict],
+    suggestions_per_person: int,
+) -> bool:
+    """Return True if every participant has hit their cap (or opted out with >=1) AND total >= 2."""
+    if not participants:
+        return False
+    counts = get_suggestion_counts(room_id)
+    done = get_done_participants(room_id)
+    all_names = {p["display_name"] for p in participants}
+    for name in all_names:
+        submitted = counts.get(name, 0)
+        hit_cap = submitted >= suggestions_per_person
+        opted_out = name in done and submitted >= 1
+        if not hit_cap and not opted_out:
+            return False
+    return sum(counts.values()) >= 2

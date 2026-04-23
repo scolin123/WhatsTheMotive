@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from better_profanity import profanity
 from flask import (
     Flask,
@@ -12,6 +13,7 @@ from flask import (
 from config import Config
 from services.room_service import (
     create_room,
+    get_nearby_rooms,
     get_room_by_code,
     add_participant,
     get_participants,
@@ -24,6 +26,9 @@ from services.suggestion_service import (
     get_suggestions_by_participant,
     get_suggestion_by_id,
     save_ai_description,
+    has_everyone_suggested,
+    mark_suggestions_done,
+    get_done_participants,
 )
 from services.ai_service import generate_suggestion_description
 from services.voting_service import (
@@ -49,6 +54,16 @@ VOTING_METHODS = {
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+def _phase_deadline(room: dict) -> str | None:
+    """Return the ISO deadline for the current timed phase, or None."""
+    started = room.get("phase_started_at")
+    if not started:
+        return None
+    timer_secs = min(room.get("suggestions_per_person", 1), 5) * 60
+    dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    return (dt + timedelta(seconds=timer_secs)).isoformat()
+
 
 def _require_session(code: str):
     """
@@ -91,6 +106,18 @@ def create_room_submit():
         room_mode = "open"
     res_anon = request.form.get("results_anonymous") == "on"
 
+    host_lat = host_lng = None
+    raw_lat  = request.form.get("host_lat", "").strip()
+    raw_lng  = request.form.get("host_lng", "").strip()
+    if raw_lat and raw_lng:
+        try:
+            host_lat = float(raw_lat)
+            host_lng = float(raw_lng)
+            if not (-90 <= host_lat <= 90) or not (-180 <= host_lng <= 180):
+                host_lat = host_lng = None
+        except ValueError:
+            host_lat = host_lng = None
+
     errors = []
     if not host_name:
         errors.append("Your name is required.")
@@ -130,6 +157,8 @@ def create_room_submit():
             results_anonymous=res_anon,
             voting_method=voting_method,
             room_mode=room_mode,
+            host_lat=host_lat,
+            host_lng=host_lng,
         )
     except (ValueError, RuntimeError) as e:
         flash(str(e), "error")
@@ -302,6 +331,8 @@ def suggestions_page(code: str):
         slots_remaining = max(0, slots_total - slots_used)
 
     participants = get_participants(room["id"])
+    done_participants = get_done_participants(room["id"])
+    suggestions_done = display_name in done_participants
     return render_template(
         "suggestions.html",
         room=room,
@@ -313,6 +344,9 @@ def suggestions_page(code: str):
         slots_total=slots_total,
         slots_remaining=slots_remaining,
         participants=participants,
+        suggestions_done=suggestions_done,
+        phase_deadline=_phase_deadline(room),
+        server_now=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -372,6 +406,44 @@ def suggestions_submit(code: str):
         add_suggestion(room_id=room["id"], participant_name=display_name, text=text)
     except ValueError as e:
         flash(str(e), "error")
+        return redirect(url_for("suggestions_page", code=code))
+
+    # Auto-advance if this was the last submission needed
+    participants = get_participants(room["id"])
+    if has_everyone_suggested(room["id"], participants, room["suggestions_per_person"]):
+        try:
+            update_phase(room["id"], "voting")
+        except (ValueError, RuntimeError):
+            pass  # poll will catch it
+        return redirect(url_for("voting_page", code=code))
+
+    return redirect(url_for("suggestions_page", code=code))
+
+
+@app.route("/room/<code>/suggestions/done", methods=["POST"])
+def suggestions_done_route(code: str):
+    display_name, _ = _require_session(code)
+    if display_name is None:
+        return redirect(url_for("join_room_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room or room["phase"] != "suggesting":
+        return redirect(url_for("suggestions_page", code=code))
+
+    my_suggestions = get_suggestions_by_participant(room["id"], display_name)
+    if len(my_suggestions) < 1:
+        flash("You must add at least one suggestion before finishing early.", "error")
+        return redirect(url_for("suggestions_page", code=code))
+
+    mark_suggestions_done(room["id"], display_name)
+
+    participants = get_participants(room["id"])
+    if has_everyone_suggested(room["id"], participants, room["suggestions_per_person"]):
+        try:
+            update_phase(room["id"], "voting")
+        except (ValueError, RuntimeError):
+            pass
+        return redirect(url_for("voting_page", code=code))
 
     return redirect(url_for("suggestions_page", code=code))
 
@@ -460,6 +532,8 @@ def voting_page(code: str):
         has_voted=has_voted,
         voters_count=len(voters),
         participants_count=len(participants),
+        phase_deadline=_phase_deadline(room),
+        server_now=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -590,14 +664,47 @@ def api_participants(code: str):
     voters          = get_voters(room["id"]) if room["phase"] == "voting" else []
     all_suggestions = get_suggestions(room["id"]) if room["phase"] == "suggesting" else []
 
-    # Auto-advance to results if everyone has voted but phase wasn't updated
-    current_phase = room["phase"]
-    if current_phase == "voting" and has_everyone_voted(room["id"], participants):
+    current_phase  = room["phase"]
+    phase_deadline = _phase_deadline(room)
+    timer_expired  = (
+        phase_deadline is not None
+        and datetime.now(timezone.utc) >= datetime.fromisoformat(phase_deadline)
+    )
+
+    # Auto-advance to voting if everyone submitted or timer expired
+    if current_phase == "suggesting" and (
+        timer_expired or has_everyone_suggested(room["id"], participants, room["suggestions_per_person"])
+    ):
         try:
-            update_phase(room["id"], "results")
-            current_phase = "results"
+            update_phase(room["id"], "voting")
+            current_phase  = "voting"
+            phase_deadline = None
+            timer_expired  = False
         except (ValueError, RuntimeError):
             pass
+
+    # Auto-advance to results if everyone voted or timer expired
+    if current_phase == "voting" and (
+        timer_expired or has_everyone_voted(room["id"], participants)
+    ):
+        try:
+            update_phase(room["id"], "results")
+            current_phase  = "results"
+            phase_deadline = None
+        except (ValueError, RuntimeError):
+            pass
+
+    # Expire lobby rooms where only the host is present after 10 minutes
+    if current_phase == "lobby" and len(participants) == 1:
+        created_at_str = room.get("created_at", "")
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - created_at > timedelta(minutes=10):
+                    update_phase(room["id"], "expired")
+                    current_phase = "expired"
+            except (ValueError, RuntimeError):
+                pass
 
     return jsonify({
         "phase":              current_phase,
@@ -607,6 +714,8 @@ def api_participants(code: str):
         "all_suggestions":    all_suggestions,
         "voting_method":      room.get("voting_method", "borda"),
         "results_anonymous":  room.get("results_anonymous", True),
+        "phase_deadline":     phase_deadline,
+        "server_now":         datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -644,6 +753,30 @@ def api_describe_suggestion(code: str, suggestion_id: str):
         pass
 
     return jsonify({"description": description})
+
+
+@app.route("/api/nearby-rooms")
+def api_nearby_rooms():
+    """
+    GET /api/nearby-rooms?lat=<float>&lng=<float>
+    Returns lobby-phase rooms whose host is within 1 km of the given coordinates.
+    """
+    raw_lat = request.args.get("lat", "").strip()
+    raw_lng = request.args.get("lng", "").strip()
+
+    if not raw_lat or not raw_lng:
+        return jsonify({"error": "lat and lng query parameters are required."}), 400
+
+    try:
+        lat = float(raw_lat)
+        lng = float(raw_lng)
+    except ValueError:
+        return jsonify({"error": "lat and lng must be valid numbers."}), 400
+
+    if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+        return jsonify({"error": "Coordinates out of valid range."}), 400
+
+    return jsonify({"rooms": get_nearby_rooms(lat, lng)})
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,8 @@
 
 {% block title %}Suggestions — {{ room.title }} — WTM{% endblock %}
 
+{% block nav_timer %}<span id="phase-timer" class="nav-timer">--:--</span>{% endblock %}
+
 {% block content %}
 
 <script id="page-data" type="application/json">
@@ -9,7 +11,9 @@
     "roomCode":       {{ room.room_code | tojson }},
     "slotsRemaining": {{ slots_remaining | tojson }},
     "roomMode":       {{ room.room_mode | tojson }},
-    "isHost":         {{ is_host | tojson }}
+    "isHost":         {{ is_host | tojson }},
+    "phaseDeadline":  {{ phase_deadline | tojson }},
+    "serverNow":      {{ server_now | tojson }}
   }
 </script>
 
@@ -68,7 +72,7 @@
       {% endif %}
     {% endwith %}
 
-    {% if slots_remaining > 0 %}
+    {% if slots_remaining > 0 and not suggestions_done %}
       <form
         class="form suggestion-form"
         method="POST"
@@ -93,9 +97,17 @@
           </div>
         </div>
       </form>
+      {% if slots_used >= 1 %}
+        <form method="POST" action="{{ url_for('suggestions_done_route', code=room.room_code) }}" style="margin-top: 0.75rem;">
+          <button class="btn btn--secondary btn--full" type="submit">Done suggestions</button>
+        </form>
+      {% endif %}
+    {% elif suggestions_done %}
+      <div class="suggestions-done-banner">
+        <p>You've finished adding suggestions early.</p>
+      </div>
     {% else %}
       <div class="suggestions-done-banner">
-        <span>✦</span>
         <p>You've submitted all your suggestions!</p>
       </div>
     {% endif %}
@@ -212,6 +224,28 @@
   const ROOM_CODE = PAGE_DATA.roomCode;
   const POLL_MS   = 3000;
 
+  // ── Countdown timer ────────────────────────────────────────────
+  let deadline = PAGE_DATA.phaseDeadline ? new Date(PAGE_DATA.phaseDeadline) : null;
+  let serverOffset = PAGE_DATA.serverNow ? new Date(PAGE_DATA.serverNow) - Date.now() : 0;
+  const timerEl = document.getElementById('phase-timer');
+
+  function updateTimer() {
+    if (!deadline || !timerEl) return;
+    const nowServer = Date.now() + serverOffset;
+    const remaining = Math.max(0, Math.floor((deadline - nowServer) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    timerEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    timerEl.classList.toggle('timer--urgent', remaining <= 30 && remaining > 0);
+    if (remaining === 0) {
+      timerEl.textContent = '00:00';
+      refreshSuggestions();
+    }
+  }
+
+  setInterval(updateTimer, 1000);
+  updateTimer();
+
   // ── Copy room code ───────────────────────────────────────────────
   function copyCode() {
     if (!navigator.clipboard) return;
@@ -249,6 +283,10 @@
       console.warn('[WTM] Suggestion poll failed:', err);
       return;
     }
+
+    // Sync clock offset and deadline from server
+    if (data.server_now) serverOffset = new Date(data.server_now) - Date.now();
+    if (data.phase_deadline) deadline = new Date(data.phase_deadline);
 
     // Redirect guests when host starts voting
     if (data.phase && data.phase === 'voting') {

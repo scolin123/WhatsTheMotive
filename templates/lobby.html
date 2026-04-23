@@ -42,6 +42,11 @@
 
 <section class="page page--lobby">
   <div class="container">
+
+    <div id="expired-banner" class="flash flash--error" hidden>
+      Room expired — nobody joined in time. Taking you back home...
+    </div>
+
     <div class="lobby-hero">
       <div class="lobby-hero__text">
         <p class="eyebrow">Room Lobby</p>
@@ -377,6 +382,14 @@
 
     if (!data || !Array.isArray(data.participants)) return;
 
+    if (data.phase === 'expired') {
+      clearInterval(pollInterval);
+      const banner = document.getElementById('expired-banner');
+      if (banner) banner.hidden = false;
+      setTimeout(function () { window.location.href = '/'; }, 4000);
+      return;
+    }
+
     if (data.phase && data.phase !== 'lobby') {
       window.location.href = `/room/${ROOM_CODE}/suggestions`;
       return;
@@ -407,6 +420,6 @@
     }).join('');
   }
 
-  setInterval(refreshParticipants, POLL_MS);
+  var pollInterval = setInterval(refreshParticipants, POLL_MS);
 </script>
 {% endblock %}

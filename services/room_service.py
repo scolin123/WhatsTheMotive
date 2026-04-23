@@ -1,5 +1,6 @@
 import random
 import string
+from datetime import datetime, timezone, timedelta
 from services.supabase_client import supabase
 
 
@@ -36,9 +37,12 @@ def create_room(
     host_name: str,
     title: str,
     max_participants: int,
-    suggestions_per_person: int,
+    suggestions_per_person: int | None = None,
     results_anonymous: bool = True,
     voting_method: str = "borda",
+    room_mode: str = "open",
+    host_lat: float | None = None,
+    host_lng: float | None = None,
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
@@ -52,21 +56,30 @@ def create_room(
         raise ValueError("title is required and cannot be blank.")
     if not isinstance(max_participants, int) or max_participants < 2:
         raise ValueError("max_participants must be a positive integer.")
-    if not isinstance(suggestions_per_person, int) or suggestions_per_person < 1:
-        raise ValueError("suggestions_per_person must be a positive integer.")
+    if room_mode not in ("open", "preset"):
+        raise ValueError("room_mode must be 'open' or 'preset'.")
+    if room_mode == "open":
+        if not isinstance(suggestions_per_person, int) or suggestions_per_person < 1:
+            raise ValueError("suggestions_per_person must be a positive integer.")
 
     code = _unique_code()
 
-    room_resp = supabase.table("rooms").insert({
-        "room_code":             code,
-        "host_name":             host_name,
-        "title":                 title,
-        "max_participants":      max_participants,
+    room_data = {
+        "room_code":              code,
+        "host_name":              host_name,
+        "title":                  title,
+        "max_participants":       max_participants,
         "suggestions_per_person": suggestions_per_person,
-        "phase":                 "lobby",
-        "results_anonymous":     results_anonymous,
-        "voting_method":         voting_method,
-    }).execute()
+        "phase":                  "lobby",
+        "results_anonymous":      results_anonymous,
+        "voting_method":          voting_method,
+        "room_mode":              room_mode,
+    }
+    if host_lat is not None and host_lng is not None:
+        room_data["host_lat"] = host_lat
+        room_data["host_lng"] = host_lng
+
+    room_resp = supabase.table("rooms").insert(room_data).execute()
 
     if not room_resp.data:
         raise RuntimeError("Failed to create room — Supabase returned no data.")
@@ -96,9 +109,42 @@ def get_room_by_code(room_code: str) -> dict | None:
     return resp.data[0] if resp.data else None
 
 
+def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dict]:
+    """
+    Return rooms in the lobby phase whose host location is within radius_km of (lat, lng).
+    Only rooms where the host opted in by storing coordinates are considered.
+    """
+    from utils.helpers import haversine_km
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+
+    resp = (
+        supabase.table("rooms")
+        .select("room_code, title, host_name, phase, host_lat, host_lng")
+        .eq("phase", "lobby")
+        .not_.is_("host_lat", "null")
+        .not_.is_("host_lng", "null")
+        .gte("created_at", cutoff)
+        .execute()
+    )
+
+    results = []
+    for room in (resp.data or []):
+        dist = haversine_km(lat, lng, room["host_lat"], room["host_lng"])
+        if dist <= radius_km:
+            results.append({
+                "title":       room["title"],
+                "host_name":   room["host_name"],
+                "code":        room["room_code"],
+                "distance_km": round(dist, 2),
+            })
+
+    return sorted(results, key=lambda r: r["distance_km"])
+
+
 def update_phase(room_id: str, phase: str) -> dict:
     """Advance a room to a new phase."""
-    valid_phases = {"lobby", "suggesting", "voting", "results"}
+    valid_phases = {"lobby", "suggesting", "voting", "results", "expired"}
     if phase not in valid_phases:
         raise ValueError(f"Invalid phase '{phase}'. Must be one of: {sorted(valid_phases)}.")
 
@@ -106,9 +152,15 @@ def update_phase(room_id: str, phase: str) -> dict:
     if not existing.data:
         raise ValueError(f"No room found with id '{room_id}'.")
 
+    update_data: dict = {"phase": phase}
+    if phase in ("suggesting", "voting"):
+        update_data["phase_started_at"] = datetime.now(timezone.utc).isoformat()
+    else:
+        update_data["phase_started_at"] = None
+
     resp = (
         supabase.table("rooms")
-        .update({"phase": phase})
+        .update(update_data)
         .eq("id", room_id)
         .execute()
     )

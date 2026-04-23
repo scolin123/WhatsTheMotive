@@ -174,11 +174,62 @@
         </div>
       </div>
 
+      <div class="form__group" id="location-field">
+        <label class="form__label" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" id="share-location-checkbox">
+          Share your location?
+        </label>
+        <span class="form__hint">Nearby visitors will see your room suggested on the home page.</span>
+        <span class="form__hint" id="location-status" style="margin-top:4px;"></span>
+      </div>
+      <input type="hidden" name="host_lat" id="host-lat">
+      <input type="hidden" name="host_lng" id="host-lng">
+
       <button class="btn btn--primary btn--full" type="submit">
-        <span class="btn__icon">✦</span> Create Room
+        <span class="btn__icon"></span> Create Room
       </button>
 
     </form>
+
+    <script>
+      (function () {
+        var checkbox  = document.getElementById('share-location-checkbox');
+        var statusEl  = document.getElementById('location-status');
+        var latInput  = document.getElementById('host-lat');
+        var lngInput  = document.getElementById('host-lng');
+
+        if (!navigator.geolocation) {
+          document.getElementById('location-field').style.display = 'none';
+          return;
+        }
+
+        checkbox.addEventListener('change', function () {
+          if (!this.checked) {
+            latInput.value = '';
+            lngInput.value = '';
+            statusEl.textContent = '';
+            return;
+          }
+
+          statusEl.textContent = 'Requesting location...';
+
+          navigator.geolocation.getCurrentPosition(
+            function (pos) {
+              latInput.value = pos.coords.latitude;
+              lngInput.value = pos.coords.longitude;
+              statusEl.textContent = 'Location captured.';
+            },
+            function () {
+              checkbox.checked = false;
+              latInput.value   = '';
+              lngInput.value   = '';
+              statusEl.textContent = 'Location access denied — room will not appear in nearby suggestions.';
+            },
+            { timeout: 8000, maximumAge: 60000 }
+          );
+        });
+      })();
+    </script>
   </div>
 </div>
 

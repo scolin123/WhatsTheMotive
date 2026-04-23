@@ -21,7 +21,7 @@
     {# ── Winner callout ───────────────────────────────────────────── #}
     {% if results %}
       <div class="winner-card">
-        <div class="winner-card__label">🎉 The move is...</div>
+        <div class="winner-card__label">The motive is...</div>
         <div class="winner-card__text">{{ results[0].text }}</div>
       </div>
     {% endif %}
@@ -31,9 +31,9 @@
         <h2 class="panel-title">Top 3 Rankings</h2>
 
         <ol class="results-list">
-            {# Use [:3] to slice the list and only take the first three items #}
-            {% for result in results[:3] %}
-            <li class="results-item{% if loop.first %} results-item--winner{% endif %}">
+            {% for result in results %}
+            <li class="results-item{% if loop.first %} results-item--winner{% endif %}"
+                {% if loop.index > 3 %}hidden data-extra{% endif %}>
                 <span class="results-position">
                   {% if loop.index == 1 %}
                     🥇
@@ -42,12 +42,12 @@
                   {% elif loop.index == 3 %}
                     🥉
                   {% else %}
-                    {{ result.position }}
+                    {{ loop.index }}
                   {% endif %}
                 </span>
-                
+
                 <span class="results-text">{{ result.text }}</span>
-                
+
                 <div class="results-right">
                   {% if voting_method == 'borda' %}
                     <span class="results-score">
@@ -64,6 +64,12 @@
             <li class="participant-empty">No results yet.</li>
             {% endfor %}
         </ol>
+        {% if results | length > 3 %}
+        <button class="btn btn--secondary results-expand-btn" id="expand-rankings"
+                type="button" data-count="{{ results | length }}">
+          Show all {{ results | length }} rankings
+        </button>
+        {% endif %}
     </div>
 
     {# ── Play again ───────────────────────────────────────────────── #}
@@ -73,9 +79,27 @@
         <a href="{{ url_for('home') }}" class="btn btn--primary">
           Start a New Room
         </a>
+        <a href="{{ url_for('join_room_page')}}" class="btn btn--secondary">
+          Join a Room
+        </a>
       </div>
     </div>
 
   </div>
 </section>
+
+<script>
+  const btn = document.getElementById('expand-rankings');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const extras = document.querySelectorAll('[data-extra]');
+      const expanded = btn.dataset.expanded === 'true';
+      extras.forEach(el => { el.hidden = expanded; });
+      btn.dataset.expanded = expanded ? '' : 'true';
+      btn.textContent = expanded
+        ? `Show all ${btn.dataset.count} rankings`
+        : 'Show less';
+    });
+  }
+</script>
 {% endblock %}
