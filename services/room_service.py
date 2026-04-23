@@ -36,9 +36,10 @@ def create_room(
     host_name: str,
     title: str,
     max_participants: int,
-    suggestions_per_person: int,
+    suggestions_per_person: int | None = None,
     results_anonymous: bool = True,
     voting_method: str = "borda",
+    room_mode: str = "open",
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
@@ -52,20 +53,24 @@ def create_room(
         raise ValueError("title is required and cannot be blank.")
     if not isinstance(max_participants, int) or max_participants < 2:
         raise ValueError("max_participants must be a positive integer.")
-    if not isinstance(suggestions_per_person, int) or suggestions_per_person < 1:
-        raise ValueError("suggestions_per_person must be a positive integer.")
+    if room_mode not in ("open", "preset"):
+        raise ValueError("room_mode must be 'open' or 'preset'.")
+    if room_mode == "open":
+        if not isinstance(suggestions_per_person, int) or suggestions_per_person < 1:
+            raise ValueError("suggestions_per_person must be a positive integer.")
 
     code = _unique_code()
 
     room_resp = supabase.table("rooms").insert({
-        "room_code":             code,
-        "host_name":             host_name,
-        "title":                 title,
-        "max_participants":      max_participants,
+        "room_code":              code,
+        "host_name":              host_name,
+        "title":                  title,
+        "max_participants":       max_participants,
         "suggestions_per_person": suggestions_per_person,
-        "phase":                 "lobby",
-        "results_anonymous":     results_anonymous,
-        "voting_method":         voting_method,
+        "phase":                  "lobby",
+        "results_anonymous":      results_anonymous,
+        "voting_method":          voting_method,
+        "room_mode":              room_mode,
     }).execute()
 
     if not room_resp.data:
