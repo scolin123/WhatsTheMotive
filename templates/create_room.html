@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Create a Room — WTM{% endblock %}
+{% block title %}Create a room — WTM{% endblock %}
 
 {% block content %}
-<div class="page-wrapper">
+<div class="page-wrapper page-wrapper--form">
   <div class="card">
 
     <div class="card__header">
-      <a href="{{ url_for('home') }}" class="back-link">← back</a>
-      <h2 class="card__title">Create a Room</h2>
-      <p class="card__subtitle">Set it up. Share the code. Let the voting begin.</p>
+      <a href="{{ url_for('home') }}" class="back-link">← Back</a>
+      <h1 class="card__title">Create a room</h1>
+      <p class="card__subtitle">Set the rules, then share the code with your group.</p>
     </div>
 
     {# Flash messages — shown on validation failure or server error #}
@@ -27,167 +27,175 @@
       Action points to create_room_submit (POST handler).
       form_data is passed back by the route on validation failure
       so the user does not have to retype their input.
-      The `| default({})` guard prevents a crash if form_data is not passed.
     #}
     <form class="form" method="POST" action="{{ url_for('create_room_submit') }}">
 
-      <div class="form__group">
-        <label class="form__label" for="host_name">Your Name</label>
-        <input
-          class="form__input"
-          type="text"
-          id="host_name"
-          name="host_name"
-          placeholder="e.g. Alex"
-          value="{{ (form_data | default({})).get('host_name', '') }}"
-          required
-          autocomplete="off"
-        >
-      </div>
-
-      <div class="form__group">
-        <label class="form__label" for="title">Room Title</label>
-        <input
-          class="form__input"
-          type="text"
-          id="title"
-          name="title"
-          placeholder="e.g. Friday night plans 🎉"
-          value="{{ (form_data | default({})).get('title', '') }}"
-          required
-          autocomplete="off"
-        >
-      </div>
-
-      <div class="form__row">
+      {# ── You ─────────────────────────────────────────────────── #}
+      <section class="form-section">
+        <h2 class="form-section__title">You</h2>
         <div class="form__group">
-          <label class="form__label" for="max_participants">Max Participants</label>
+          <label class="form__label" for="host_name">Your name</label>
           <input
             class="form__input"
+            type="text"
+            id="host_name"
+            name="host_name"
+            placeholder="e.g. Alex"
+            value="{{ (form_data | default({})).get('host_name', '') }}"
+            required
+            autocomplete="off"
+          >
+        </div>
+      </section>
+
+      {# ── Room ────────────────────────────────────────────────── #}
+      <section class="form-section">
+        <h2 class="form-section__title">Room</h2>
+        <div class="form__group">
+          <label class="form__label" for="title">Room title</label>
+          <input
+            class="form__input"
+            type="text"
+            id="title"
+            name="title"
+            placeholder="e.g. Friday night plans"
+            value="{{ (form_data | default({})).get('title', '') }}"
+            required
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="form__group">
+          <label class="form__label" for="max_participants">Max participants</label>
+          <input
+            class="form__input form__input--compact"
             type="number"
             id="max_participants"
             name="max_participants"
-            placeholder="e.g. 8"
+            placeholder="8"
             value="{{ (form_data | default({})).get('max_participants', '') }}"
             min="2"
             max="50"
             required
           >
-          <span class="form__hint">min. 2</span>
+          <span class="form__hint">Between 2 and 50.</span>
         </div>
+      </section>
+
+      {# ── Voting ──────────────────────────────────────────────── #}
+      <section class="form-section">
+        <h2 class="form-section__title">Voting</h2>
 
         <div class="form__group">
-          <label class="form__label" for="suggestions_per_person">Suggestions Per Person</label>
+          <span class="form__label" id="mode-label">How options get added</span>
+          <div class="choice-group" role="radiogroup" aria-labelledby="mode-label">
+            <label class="choice-card">
+              <input
+                type="radio"
+                name="room_mode"
+                value="open"
+                id="mode-open"
+                {% if (form_data | default({})).get('room_mode', 'open') != 'preset' %}checked{% endif %}
+              >
+              <span class="choice-card__body">
+                <span class="choice-card__title">Open</span>
+                <span class="choice-card__hint">Everyone adds options, then votes.</span>
+              </span>
+            </label>
+
+            <label class="choice-card">
+              <input
+                type="radio"
+                name="room_mode"
+                value="preset"
+                id="mode-preset"
+                {% if (form_data | default({})).get('room_mode') == 'preset' %}checked{% endif %}
+              >
+              <span class="choice-card__body">
+                <span class="choice-card__title">Preset</span>
+                <span class="choice-card__hint">You set the options; guests only vote.</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form__group" id="spp-field">
+          <label class="form__label" for="suggestions_per_person">Suggestions per person</label>
           <input
-            class="form__input"
+            class="form__input form__input--compact"
             type="number"
             id="suggestions_per_person"
             name="suggestions_per_person"
-            placeholder="e.g. 3"
+            placeholder="3"
             value="{{ (form_data | default({})).get('suggestions_per_person', '') }}"
             min="1"
             max="10"
             required
           >
-          <span class="form__hint">min. 1</span>
+          <span class="form__hint">How many each person can add.</span>
         </div>
-      </div>
 
-      <div class="form__group">
-        <label class="form__label" style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-          <input type="checkbox" name="results_anonymous" checked>
-          Anonymous Results?
+        <div class="form__group">
+          <span class="form__label" id="method-label">Voting method</span>
+          <div class="choice-group" role="radiogroup" aria-labelledby="method-label">
+            <label class="choice-card">
+              <input
+                type="radio"
+                name="voting_method"
+                value="borda"
+                {% if (form_data | default({})).get('voting_method', 'borda') == 'borda' %}checked{% endif %}
+              >
+              <span class="choice-card__body">
+                <span class="choice-card__title">Point count</span>
+                <span class="choice-card__hint">Higher ranks earn more points; top total wins.</span>
+              </span>
+            </label>
+
+            <label class="choice-card">
+              <input
+                type="radio"
+                name="voting_method"
+                value="irv"
+                {% if (form_data | default({})).get('voting_method') == 'irv' %}checked{% endif %}
+              >
+              <span class="choice-card__body">
+                <span class="choice-card__title">Elimination</span>
+                <span class="choice-card__hint">Drop the lowest each round until one has a majority.</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <label class="setting">
+          <span class="setting__text">
+            <span class="setting__title">Anonymous results</span>
+            <span class="setting__desc">Hide who suggested each option when results are revealed.</span>
+          </span>
+          <span class="switch">
+            <input type="checkbox" name="results_anonymous" checked>
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+          </span>
         </label>
-        <span class="form__hint">If unchecked, the winner's name will be revealed at the end.</span>
-      </div>
+      </section>
 
-
-      <div class="form__group">
-        <label class="form__label">Voting Method</label>
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
-
-          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-            <input
-              type="radio"
-              name="voting_method"
-              value="borda"
-              style="margin-top: 3px; flex-shrink: 0;"
-              {% if (form_data | default({})).get('voting_method', 'borda') == 'borda' %}checked{% endif %}
-            >
-            <span style="display: flex; flex-direction: column; gap: 4px;">
-              <strong>Point Count</strong>
-              <span class="form__hint">Rank 1 earns the most points, rank 2 one fewer, etc. Highest total wins.</span>
-            </span>
-          </label>
-
-          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-            <input
-              type="radio"
-              name="voting_method"
-              value="irv"
-              style="margin-top: 3px; flex-shrink: 0;"
-              {% if (form_data | default({})).get('voting_method') == 'irv' %}checked{% endif %}
-            >
-            <span style="display: flex; flex-direction: column; gap: 4px;">
-              <strong>Elimination</strong>
-              <span class="form__hint">The lowest-voted suggestion is eliminated each round until one has &gt;50% of the vote.</span>
-            </span>
-          </label>
-
-        </div>
-      </div>
-
-      <div class="form__group">
-        <label class="form__label">Room Mode</label>
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
-
-          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-            <input
-              type="radio"
-              name="room_mode"
-              value="open"
-              id="mode-open"
-              style="margin-top: 3px; flex-shrink: 0;"
-              {% if (form_data | default({})).get('room_mode', 'open') != 'preset' %}checked{% endif %}
-            >
-            <span style="display: flex; flex-direction: column; gap: 4px;">
-              <strong>Open</strong>
-              <span class="form__hint">Everyone submits suggestions, then votes.</span>
-            </span>
-          </label>
-
-          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-            <input
-              type="radio"
-              name="room_mode"
-              value="preset"
-              id="mode-preset"
-              style="margin-top: 3px; flex-shrink: 0;"
-              {% if (form_data | default({})).get('room_mode') == 'preset' %}checked{% endif %}
-            >
-            <span style="display: flex; flex-direction: column; gap: 4px;">
-              <strong>Preset</strong>
-              <span class="form__hint">You enter all the options. Participants only vote.</span>
-            </span>
-          </label>
-
-        </div>
-      </div>
-
-      <div class="form__group" id="location-field">
-        <label class="form__label" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-          <input type="checkbox" id="share-location-checkbox">
-          Share your location?
+      {# ── Discovery (optional) ────────────────────────────────── #}
+      <section class="form-section" id="location-field">
+        <label class="setting">
+          <span class="setting__text">
+            <span class="setting__title">Share location</span>
+            <span class="setting__desc">Let people nearby find this room on the home screen.</span>
+          </span>
+          <span class="switch">
+            <input type="checkbox" id="share-location-checkbox">
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+          </span>
         </label>
-        <span class="form__hint">Nearby visitors will see your room suggested on the home page.</span>
-        <span class="form__hint" id="location-status" style="margin-top:4px;"></span>
-      </div>
-      <input type="hidden" name="host_lat" id="host-lat">
-      <input type="hidden" name="host_lng" id="host-lng">
+        <span class="form__hint" id="location-status" role="status" aria-live="polite"></span>
+        <input type="hidden" name="host_lat" id="host-lat">
+        <input type="hidden" name="host_lng" id="host-lng">
+      </section>
 
-      <button class="btn btn--primary btn--full" type="submit">
-        <span class="btn__icon"></span> Create Room
-      </button>
+      <button class="btn btn--primary btn--full btn--large" type="submit">Create room</button>
 
     </form>
 
@@ -211,19 +219,19 @@
             return;
           }
 
-          statusEl.textContent = 'Requesting location...';
+          statusEl.textContent = 'Requesting location…';
 
           navigator.geolocation.getCurrentPosition(
             function (pos) {
               latInput.value = pos.coords.latitude;
               lngInput.value = pos.coords.longitude;
-              statusEl.textContent = 'Location captured.';
+              statusEl.textContent = 'Location captured — your room will show up nearby.';
             },
             function () {
               checkbox.checked = false;
               latInput.value   = '';
               lngInput.value   = '';
-              statusEl.textContent = 'Location access denied — room will not appear in nearby suggestions.';
+              statusEl.textContent = 'Location access denied — your room won’t appear nearby.';
             },
             { timeout: 8000, maximumAge: 60000 }
           );
@@ -234,13 +242,13 @@
 </div>
 
 <script>
-  // Find the suggestions-per-person row (it lives inside .form__row)
+  // Hide "suggestions per person" in preset mode (the host sets all options).
   const sppInput = document.getElementById('suggestions_per_person');
-  const sppRow   = sppInput ? sppInput.closest('.form__row') : null;
+  const sppField = document.getElementById('spp-field');
 
   function toggleSpp() {
     const isPreset = document.getElementById('mode-preset').checked;
-    if (sppRow) sppRow.style.display = isPreset ? 'none' : '';
+    if (sppField) sppField.hidden = isPreset;
     if (sppInput) sppInput.required = !isPreset;
   }
 

@@ -1,37 +1,48 @@
 {% extends "base.html" %}
 
-{% block title %}What's The Move?{% endblock %}
+{% block title %}WTM — What's the motive?{% endblock %}
 
 {% block content %}
-<div class="hero">
-  <div class="hero__badge">Decide together</div>
+<main class="home">
+  <div class="home__grid">
 
-  <h1 class="hero__title">
-    What's<br>The Motive?
-  </h1>
+    {# ── Hero ──────────────────────────────────────────────────── #}
+    <section class="hero">
+      <h1 class="hero__title">
+        What's the<br><span class="hero__title-accent">motive?</span>
+      </h1>
+      <p class="hero__lede">
+        Spin up a room, drop in the options, and let your group rank them.
+        No more 200-message threads just to pick a Friday plan.
+      </p>
+      <div class="hero__actions">
+        <a href="{{ url_for('create_room_page') }}" class="btn btn--primary btn--large">Create a room</a>
+        <a href="{{ url_for('join_room_page') }}" class="btn btn--secondary btn--large">Join a room</a>
+      </div>
+      <p class="hero__hint">No account needed · works on any phone</p>
+    </section>
 
-  <p class="hero__tagline">
-    Stop the endless group chat debate.<br>
-    Create a room, vote on options, get moving.
-  </p>
+    {# ── Rooms near you ────────────────────────────────────────── #}
+    <aside class="nearby" aria-labelledby="nearby-heading">
+      <div class="nearby__header">
+        <h2 id="nearby-heading" class="section-title">Rooms near you</h2>
+        <span class="nearby__chip" id="nearby-chip" hidden>Live</span>
+      </div>
 
-  <div class="hero__actions">
-    <a href="{{ url_for('create_room_page') }}" class="btn btn--primary">
-      <span class="btn__icon"></span> Create a Room
-    </a>
-    <a href="{{ url_for('join_room_page') }}" class="btn btn--secondary">
-      Join a Room
-    </a>
+      <div id="nearby-empty" class="empty-state">
+        <div class="empty-state__title">No open rooms nearby</div>
+        <p class="empty-state__desc">
+          Rooms appear here when someone near you is hosting. Start one and
+          share the code — your group can join in seconds.
+        </p>
+        <a href="{{ url_for('create_room_page') }}" class="link-arrow">Create a room →</a>
+      </div>
+
+      <ul id="nearby-list" class="nearby__list" hidden></ul>
+    </aside>
+
   </div>
-
-</div>
-
-<section id="nearby-section" class="nearby-section" hidden>
-  <div class="nearby-section__inner">
-    <h2 class="nearby-section__heading">Rooms near you</h2>
-    <ul id="nearby-list" class="nearby-list"></ul>
-  </div>
-</section>
+</main>
 
 <script>
   (function () {
@@ -45,33 +56,42 @@
         .replace(/"/g, '&quot;');
     }
 
+    function formatDistance(km) {
+      if (typeof km !== 'number' || isNaN(km)) return '';
+      if (km < 1) return Math.max(1, Math.round(km * 1000)) + ' m away';
+      return km.toFixed(1) + ' km away';
+    }
+
     navigator.geolocation.getCurrentPosition(
       function (pos) {
-        var lat = pos.coords.latitude;
-        var lng = pos.coords.longitude;
-
-        fetch('/api/nearby-rooms?lat=' + lat + '&lng=' + lng, {
+        fetch('/api/nearby-rooms?lat=' + pos.coords.latitude + '&lng=' + pos.coords.longitude, {
           headers: { 'Accept': 'application/json' }
         })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
           if (!data || !data.rooms || data.rooms.length === 0) return;
 
-          var section = document.getElementById('nearby-section');
-          var list    = document.getElementById('nearby-list');
+          var empty = document.getElementById('nearby-empty');
+          var list  = document.getElementById('nearby-list');
+          var chip  = document.getElementById('nearby-chip');
 
           list.innerHTML = data.rooms.map(function (room) {
-            var displayName = escapeHtml(room.host_name) + "'s " + escapeHtml(room.title);
-            return '<li class="nearby-item">' +
-              '<div class="nearby-item__info">' +
-                '<span class="nearby-item__title">' + displayName + '</span>' +
-                '<span class="nearby-item__meta">Code: ' + escapeHtml(room.code) + '</span>' +
+            var title = escapeHtml(room.host_name) + "'s " + escapeHtml(room.title);
+            var meta  = escapeHtml(room.code);
+            var dist  = formatDistance(room.distance_km);
+            if (dist) meta += ' · ' + dist;
+            return '<li class="room-card">' +
+              '<div class="room-card__body">' +
+                '<span class="room-card__title">' + title + '</span>' +
+                '<span class="room-card__meta">' + meta + '</span>' +
               '</div>' +
-              '<a href="/join?code=' + encodeURIComponent(room.code) + '" class="btn btn--primary btn--small">Join</a>' +
+              '<a href="/join?code=' + encodeURIComponent(room.code) + '" class="btn btn--secondary btn--small">Join</a>' +
             '</li>';
           }).join('');
 
-          section.hidden = false;
+          empty.hidden = true;
+          list.hidden  = false;
+          if (chip) chip.hidden = false;
         })
         .catch(function () {});
       },

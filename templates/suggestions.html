@@ -30,7 +30,7 @@
     <div class="room-code-display">
       <span class="room-code-display__label">room code</span>
       <span class="room-code-display__code">{{ room.room_code }}</span>
-      <button class="copy-btn" onclick="copyCode()" title="Copy room code">⧉</button>
+      <button class="copy-btn" onclick="copyCode()" title="Copy room code">Copy</button>
     </div>
   </div>
 
@@ -252,10 +252,10 @@
     navigator.clipboard.writeText(ROOM_CODE).then(() => {
       const btn = document.querySelector('.copy-btn');
       if (!btn) return;
-      btn.textContent = '✓';
+      btn.textContent = 'Copied';
       btn.classList.add('copy-btn--copied');
       setTimeout(() => {
-        btn.textContent = '⧉';
+        btn.textContent = 'Copy';
         btn.classList.remove('copy-btn--copied');
       }, 1500);
     }).catch(() => {});

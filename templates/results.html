@@ -34,17 +34,7 @@
             {% for result in results %}
             <li class="results-item{% if loop.first %} results-item--winner{% endif %}"
                 {% if loop.index > 3 %}hidden data-extra{% endif %}>
-                <span class="results-position">
-                  {% if loop.index == 1 %}
-                    🥇
-                  {% elif loop.index == 2 %}
-                    🥈
-                  {% elif loop.index == 3 %}
-                    🥉
-                  {% else %}
-                    {{ loop.index }}
-                  {% endif %}
-                </span>
+                <span class="results-position">{{ loop.index }}</span>
 
                 <span class="results-text">{{ result.text }}</span>
 
