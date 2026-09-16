@@ -38,6 +38,19 @@ from services.voting_service import (
     has_everyone_voted,
     calculate_results,
 )
+from werkzeug.exceptions import HTTPException
+
+# Supabase/PostgREST errors (e.g. RLS denials, constraint violations) are raised
+# as APIError, which is neither ValueError nor RuntimeError. Import it so route
+# handlers can catch it and surface a friendly message instead of a blank 500.
+try:
+    from postgrest.exceptions import APIError
+except Exception:  # pragma: no cover - guards against postgrest moving internals
+    class APIError(Exception):
+        pass
+
+# Errors that route handlers can recover from with a flash message + re-render.
+DB_ERRORS = (ValueError, RuntimeError, APIError)
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -160,8 +173,12 @@ def create_room_submit():
             host_lat=host_lat,
             host_lng=host_lng,
         )
-    except (ValueError, RuntimeError) as e:
-        flash(str(e), "error")
+    except DB_ERRORS as e:
+        app.logger.exception("Room creation failed")
+        flash(
+            "Something went wrong creating the room. Please try again in a moment.",
+            "error",
+        )
         return render_template("create_room.html", form_data=request.form), 500
 
     session["room_code"]    = room["room_code"]
@@ -777,6 +794,32 @@ def api_nearby_rooms():
         return jsonify({"error": "Coordinates out of valid range."}), 400
 
     return jsonify({"rooms": get_nearby_rooms(lat, lng)})
+
+
+# ---------------------------------------------------------------------------
+# Global error handler
+# ---------------------------------------------------------------------------
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    """
+    Catch-all for anything a route didn't handle (e.g. a Supabase APIError).
+
+    Logs the full traceback to the server log so the real cause is visible,
+    then returns a friendly response instead of Flask's blank
+    "Internal Server Error" page.
+    """
+    # Let normal HTTP errors (404, 405, etc.) keep their default behavior.
+    if isinstance(e, HTTPException):
+        return e
+
+    app.logger.exception("Unhandled exception during %s %s", request.method, request.path)
+
+    # API routes expect JSON, not an HTML page.
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "An internal error occurred. Please try again."}), 500
+
+    return render_template("error.html"), 500
 
 
 # ---------------------------------------------------------------------------
