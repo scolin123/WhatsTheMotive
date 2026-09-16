@@ -100,6 +100,55 @@ def get_voters(room_id: str) -> list[str]:
     return voters
 
 
+def get_ballots(room_id: str, suggestions: list[dict]) -> list[dict]:
+    """
+    Return every participant's submitted ranking, resolved to suggestion text.
+
+    Shape::
+
+        [
+            {
+                "participant_name": "Colin",
+                "ranking": [
+                    {"rank": 1, "text": "Movie 1"},
+                    {"rank": 2, "text": "Movie 2"},
+                ],
+            },
+            ...
+        ]
+
+    Participants are ordered by name (case-insensitive); each ranking is
+    ordered best-first (rank ascending). Suggestions that no longer exist are
+    skipped.
+    """
+    by_id = {s["id"]: s for s in suggestions}
+
+    resp = (
+        supabase.table("votes")
+        .select("participant_name, suggestion_id, rank")
+        .eq("room_id", room_id)
+        .execute()
+    )
+
+    ballots: dict[str, list[dict]] = {}
+    for row in (resp.data or []):
+        suggestion = by_id.get(row["suggestion_id"])
+        if suggestion is None:
+            continue
+        ballots.setdefault(row["participant_name"], []).append({
+            "rank": row["rank"],
+            "text": suggestion.get("text", ""),
+        })
+
+    return [
+        {
+            "participant_name": name,
+            "ranking": sorted(ranking, key=lambda item: item["rank"]),
+        }
+        for name, ranking in sorted(ballots.items(), key=lambda kv: kv[0].lower())
+    ]
+
+
 def has_everyone_voted(room_id: str, participants: list[dict]) -> bool:
     """
     Return True if every participant has submitted a vote.

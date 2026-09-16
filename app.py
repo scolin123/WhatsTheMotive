@@ -35,6 +35,7 @@ from services.voting_service import (
     save_vote,
     get_vote_by_participant,
     get_voters,
+    get_ballots,
     has_everyone_voted,
     calculate_results,
 )
@@ -118,6 +119,9 @@ def create_room_submit():
     if room_mode not in ("open", "preset"):
         room_mode = "open"
     res_anon = request.form.get("results_anonymous") == "on"
+    # Only meaningful for the ranking (Borda) method — the checkbox is hidden
+    # for elimination, but guard here too so a stray value can't sneak through.
+    reveal_rankings = request.form.get("reveal_rankings") == "on" and voting_method == "borda"
 
     host_lat = host_lng = None
     raw_lat  = request.form.get("host_lat", "").strip()
@@ -170,6 +174,7 @@ def create_room_submit():
             results_anonymous=res_anon,
             voting_method=voting_method,
             room_mode=room_mode,
+            reveal_rankings=reveal_rankings,
             host_lat=host_lat,
             host_lng=host_lng,
         )
@@ -643,6 +648,10 @@ def results_page(code: str):
     voters      = get_voters(room["id"])
     participants = get_participants(room["id"])
 
+    # Optional per-voter ballot reveal — only for the ranking (Borda) method.
+    show_rankings = bool(room.get("reveal_rankings")) and voting_method == "borda"
+    ballots = get_ballots(room["id"], suggestions) if show_rankings else []
+
     return render_template(
         "results.html",
         room=room,
@@ -652,6 +661,7 @@ def results_page(code: str):
         voters_count=len(voters),
         participants_count=len(participants),
         voting_method=voting_method,
+        ballots=ballots,
     )
 
 

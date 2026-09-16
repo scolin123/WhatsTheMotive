@@ -41,6 +41,7 @@ def create_room(
     results_anonymous: bool = True,
     voting_method: str = "borda",
     room_mode: str = "open",
+    reveal_rankings: bool = False,
     host_lat: float | None = None,
     host_lng: float | None = None,
 ) -> dict:
@@ -74,6 +75,7 @@ def create_room(
         "results_anonymous":      results_anonymous,
         "voting_method":          voting_method,
         "room_mode":              room_mode,
+        "reveal_rankings":        reveal_rankings,
     }
     if host_lat is not None and host_lng is not None:
         room_data["host_lat"] = host_lat
