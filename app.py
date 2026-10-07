@@ -435,7 +435,12 @@ def suggestions_submit(code: str):
         return redirect(url_for("suggestions_page", code=code))
 
     try:
-        add_suggestion(room_id=room["id"], participant_name=display_name, text=text)
+        add_suggestion(
+            room_id=room["id"],
+            participant_name=display_name,
+            text=text,
+            poster_url=movie_service.clean_poster_url(request.form.get("poster_url")),
+        )
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("suggestions_page", code=code))

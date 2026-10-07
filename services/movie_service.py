@@ -40,10 +40,17 @@ def _search(query: str) -> tuple[dict, ...]:
     with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.load(resp)
 
+    # TMDB orders by text relevance, which puts obscure exact matches first
+    # ("spi" -> "SPI"). Sort by popularity so well-known films lead and niche
+    # ones need a more specific search.
+    results = sorted(
+        (m for m in data.get("results", []) if m.get("title")),
+        key=lambda m: m.get("popularity") or 0,
+        reverse=True,
+    )
+
     movies = []
-    for m in data.get("results", [])[:MAX_RESULTS]:
-        if not m.get("title"):
-            continue
+    for m in results[:MAX_RESULTS]:
         movies.append({
             "id":     m["id"],
             "title":  m["title"],
@@ -51,6 +58,14 @@ def _search(query: str) -> tuple[dict, ...]:
             "poster": f"{_POSTER_URL}{m['poster_path']}" if m.get("poster_path") else None,
         })
     return tuple(movies)
+
+
+def clean_poster_url(url: str | None) -> str | None:
+    """Return url only if it's a TMDB poster from our search, else None."""
+    url = (url or "").strip()
+    if url.startswith(_POSTER_URL + "/") and len(url) < 200 and '"' not in url:
+        return url
+    return None
 
 
 def search_movies(query: str) -> list[dict]:

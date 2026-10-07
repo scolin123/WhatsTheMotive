@@ -4,6 +4,7 @@
 (() => {
   const input = document.querySelector("[data-movie-search]");
   const list = document.getElementById("movie-results");
+  const posterInput = document.getElementById("poster_url");
   if (!input || !list) return;
 
   const DEBOUNCE_MS = 250;
@@ -77,6 +78,7 @@
     const m = movies[i];
     if (!m) return;
     input.value = m.year ? `${m.title} (${m.year})` : m.title;
+    if (posterInput) posterInput.value = m.poster || "";
     close();
     input.focus();
   }
@@ -101,6 +103,8 @@
   }
 
   input.addEventListener("input", () => {
+    // Typing after a pick means it's no longer that movie, so drop its poster.
+    if (posterInput) posterInput.value = "";
     clearTimeout(timer);
     const query = input.value.trim();
     if (query.length < 2) {

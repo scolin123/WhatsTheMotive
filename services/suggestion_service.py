@@ -5,7 +5,9 @@ from services.supabase_client import supabase
 # Write
 # ---------------------------------------------------------------------------
 
-def add_suggestion(room_id: str, participant_name: str, text: str) -> dict:
+def add_suggestion(
+    room_id: str, participant_name: str, text: str, poster_url: str | None = None
+) -> dict:
     """
     Add a suggestion for a participant.
 
@@ -13,6 +15,7 @@ def add_suggestion(room_id: str, participant_name: str, text: str) -> dict:
         room_id:          UUID of the room.
         participant_name: display_name of the person submitting.
         text:             The suggestion text.
+        poster_url:       Optional TMDB poster, set when picked from movie search.
 
     Returns:
         The newly created suggestion record as a dict.
@@ -59,15 +62,15 @@ def add_suggestion(room_id: str, participant_name: str, text: str) -> dict:
                 f"of your suggestion(s)."
             )
 
-    resp = (
-        supabase.table("suggestions")
-        .insert({
-            "room_id":          room_id,
-            "participant_name": participant_name,
-            "text":             text,
-        })
-        .execute()
-    )
+    row = {
+        "room_id":          room_id,
+        "participant_name": participant_name,
+        "text":             text,
+    }
+    if poster_url:
+        row["poster_url"] = poster_url
+
+    resp = supabase.table("suggestions").insert(row).execute()
 
     if not resp.data:
         raise RuntimeError("Failed to save suggestion — Supabase returned no data.")

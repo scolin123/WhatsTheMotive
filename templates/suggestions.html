@@ -101,6 +101,7 @@
               {% endif %}
             >
             {% if movie_search %}
+            <input type="hidden" name="poster_url" id="poster_url" value="">
             <ul id="movie-results" class="movie-results" role="listbox" hidden></ul>
             {% endif %}
             <button class="btn btn--primary" type="submit">Add</button>
@@ -181,6 +182,9 @@
               {% else %}
                 <span class="participant-avatar">{{ s.participant_name[0] | upper }}</span>
               {% endif %}
+            {% endif %}
+            {% if s.poster_url %}
+              <img src="{{ s.poster_url }}" alt="" class="suggestion-poster" loading="lazy">
             {% endif %}
             <span class="participant-name">{{ s.text }}</span>
             <button class="ai-info-btn" data-suggestion-id="{{ s.id }}" aria-label="Show description">i</button>
@@ -338,10 +342,14 @@
         const avatarHtml = data.results_anonymous ? '' : (avatarMap[name]
           ? `<img src="/static/images/${avatarMap[name]}" alt="${name}" class="participant-avatar participant-avatar--img">`
           : `<span class="participant-avatar">${initial}</span>`);
+        const posterHtml = (s.poster_url || '').startsWith('https://image.tmdb.org/t/p/')
+          ? `<img src="${s.poster_url.replace(/"/g, '&quot;')}" alt="" class="suggestion-poster" loading="lazy">`
+          : '';
         return `
           <li class="participants-list__item suggestion-item">
             <div class="suggestion-item-row">
               ${avatarHtml}
+              ${posterHtml}
               <span class="participant-name">${safeText}</span>
               <button class="ai-info-btn" data-suggestion-id="${safeId}" aria-label="Show description">i</button>
             </div>
