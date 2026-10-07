@@ -6,6 +6,16 @@
 <section class="page page--lobby">
   <div class="container">
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     {# ── Header ──────────────────────────────────────────────────── #}
     <div class="lobby-hero">
       <div class="lobby-hero__text">
@@ -19,16 +29,45 @@
     </div>
 
     {# ── Winner callout ───────────────────────────────────────────── #}
-    {% if results %}
+    {% if runoff_results %}
+      <div class="winner-card">
+        <div class="winner-card__label">The motive is...</div>
+        <div class="winner-card__text">{{ runoff_results[0].text }}</div>
+        <div class="winner-card__credit">Won the runoff</div>
+      </div>
+    {% elif results %}
       <div class="winner-card">
         <div class="winner-card__label">The motive is...</div>
         <div class="winner-card__text">{{ results[0].text }}</div>
       </div>
     {% endif %}
 
+    {# ── Runoff tally ─────────────────────────────────────────────── #}
+    {% if runoff_results %}
+    <div class="panel">
+        <h2 class="panel-title">Runoff</h2>
+        <ol class="results-list">
+            {% for result in runoff_results %}
+            <li class="results-item{% if loop.first %} results-item--winner{% endif %}">
+                <span class="results-position">{{ loop.index }}</span>
+                <span class="results-text">{{ result.text }}</span>
+                <div class="results-right">
+                  <span class="results-score">
+                    {{ result.votes }} vote{{ '' if result.votes == 1 else 's' }}
+                  </span>
+                  {% if not room.results_anonymous %}
+                    <span class="results-author">Suggested by {{ result.participant_name }}</span>
+                  {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endif %}
+
     {# ── Full ranked list — scores shown, no author attribution ───── #}
     <div class="panel">
-        <h2 class="panel-title">Top 3 Rankings</h2>
+        <h2 class="panel-title">{{ 'Round 1 Rankings' if runoff_results else 'Top 3 Rankings' }}</h2>
 
         <ol class="results-list">
             {% for result in results %}
@@ -84,6 +123,18 @@
     </div>
     {% endif %}
 
+    {# ── Runoff (host only, once) ─────────────────────────────────── #}
+    {% if can_start_runoff %}
+    <div class="lobby-action">
+      <div class="action-card">
+        <p class="action-text">Not feeling it? Take the top {{ [results | length, 3] | min }} to a runoff. Everyone gets one vote.</p>
+        <form method="POST" action="{{ url_for('start_runoff', code=room.room_code) }}">
+          <button type="submit" class="btn btn--primary">Vote on the Top {{ [results | length, 3] | min }}</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
     {# ── Play again ───────────────────────────────────────────────── #}
     <div class="lobby-action">
       <div class="action-card">
@@ -101,6 +152,24 @@
 </section>
 
 <script>
+  {% if not room.runoff_status %}
+  // Follow the host into a runoff if they start one.
+  setInterval(async () => {
+    try {
+      const res = await fetch(`/api/room/{{ room.room_code }}/participants`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.runoff_status === 'voting') {
+        window.location.href = `/room/{{ room.room_code }}/runoff`;
+      }
+    } catch (err) {
+      console.warn('[WTM] Poll failed:', err);
+    }
+  }, 3000);
+  {% endif %}
+
   const btn = document.getElementById('expand-rankings');
   if (btn) {
     btn.addEventListener('click', () => {

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Runoff — {{ room.title }} — WTM{% endblock %}
+
+{% block content %}
+<section class="page page--voting">
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="voting-hero">
+      <div>
+        <p class="eyebrow">Runoff</p>
+        <h1 class="page-title">{{ room.title }}</h1>
+        <p class="page-subtitle">
+          It's down to the top {{ candidates | length }}. Pick one.
+        </p>
+      </div>
+
+      <div class="phase-pill phase-pill--voting">Runoff</div>
+    </div>
+
+    <div class="panel voting-status">
+      <div class="status-row">
+        <div>
+          <h2 class="panel-title">Voting Progress</h2>
+          <p class="muted">
+            <span id="voters-count">{{ voters_count }}</span> of {{ participants_count }} participant(s) voted
+          </p>
+        </div>
+
+        <div class="status-chip">
+          Room Code: <strong>{{ room.room_code }}</strong>
+        </div>
+      </div>
+
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"
+             data-pct="{{ (voters_count * 100 // participants_count) if participants_count else 0 }}"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <form method="POST" action="{{ url_for('runoff_submit', code=room.room_code) }}">
+        <div class="runoff-options">
+          {% for c in candidates %}
+          <label class="runoff-option">
+            <input type="radio" name="suggestion_id" value="{{ c.id }}"
+                   {% if c.id == my_pick %}checked{% endif %} required>
+            <span class="runoff-option__seed">#{{ c.position }}</span>
+            <span class="runoff-option__text">{{ c.text }}</span>
+            {% if not room.results_anonymous %}
+              <span class="results-author">Suggested by {{ c.participant_name }}</span>
+            {% endif %}
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="voting-actions">
+          <button type="submit" id="runoff-submit"
+                  class="btn btn--large {{ 'btn--submitted' if my_pick else 'btn--primary' }}">
+            {{ 'Submitted!' if my_pick else 'Submit Vote' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    {% if is_host %}
+    <div style="padding-bottom: 2rem;">
+      <form method="POST" action="{{ url_for('finish_runoff', code=room.room_code) }}" id="finish-runoff-form">
+        <button type="button" class="btn btn--ghost btn--full" onclick="document.getElementById('phase-confirm-overlay').removeAttribute('hidden')">
+          Reveal Results
+        </button>
+      </form>
+    </div>
+
+    <div id="phase-confirm-overlay" class="confirm-overlay" hidden>
+      <div class="confirm-dialog">
+        <p class="confirm-dialog__message">Close the runoff and reveal the winner?</p>
+        <div class="confirm-dialog__actions">
+          <button class="btn btn--ghost" onclick="document.getElementById('phase-confirm-overlay').setAttribute('hidden', '')">Cancel</button>
+          <button class="btn btn--primary" onclick="document.getElementById('finish-runoff-form').submit()">Yes, reveal results</button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+  (() => {
+    const ROOM_CODE = {{ room.room_code | tojson }};
+    const votersEl = document.getElementById('voters-count');
+    const fillEl = document.getElementById('progress-fill');
+    const submitBtn = document.getElementById('runoff-submit');
+
+    fillEl.style.width = `${fillEl.dataset.pct || 0}%`;
+
+    document.querySelectorAll('input[name="suggestion_id"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (!submitBtn.classList.contains('btn--submitted')) return;
+        submitBtn.classList.replace('btn--submitted', 'btn--primary');
+        submitBtn.textContent = 'Submit Vote';
+      });
+    });
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/room/${ROOM_CODE}/participants`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.runoff_status !== 'voting') {
+          window.location.href = `/room/${ROOM_CODE}/results`;
+          return;
+        }
+        votersEl.textContent = String(data.runoff_voters_count);
+        const pct = data.participants_count > 0
+          ? Math.round((data.runoff_voters_count / data.participants_count) * 100)
+          : 0;
+        fillEl.style.width = `${pct}%`;
+      } catch (err) {
+        console.warn('[WTM] Poll failed:', err);
+      }
+    }
+
+    setInterval(poll, 3000);
+  })();
+</script>
+{% endblock %}

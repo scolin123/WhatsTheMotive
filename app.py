@@ -39,6 +39,14 @@ from services.voting_service import (
     has_everyone_voted,
     calculate_results,
 )
+from services.runoff_service import (
+    set_runoff_status,
+    get_runoff_candidates,
+    save_runoff_vote,
+    get_runoff_votes,
+    has_everyone_runoff_voted,
+    calculate_runoff_results,
+)
 from werkzeug.exceptions import HTTPException
 
 # Supabase/PostgREST errors (e.g. RLS denials, constraint violations) are raised
@@ -640,6 +648,9 @@ def results_page(code: str):
     if display_name is None:
         return redirect(url_for("join_room_page", code=code))
 
+    if room.get("runoff_status") == "voting":
+        return redirect(url_for("runoff_page", code=code))
+
     # Explicitly get the voting method to ensure the template receives it
     voting_method = room.get("voting_method", "borda")
 
@@ -652,6 +663,12 @@ def results_page(code: str):
     show_rankings = bool(room.get("reveal_rankings")) and voting_method == "borda"
     ballots = get_ballots(room["id"], suggestions) if show_rankings else []
 
+    runoff_results = []
+    if room.get("runoff_status") == "done":
+        runoff_results = calculate_runoff_results(
+            get_runoff_candidates(results), get_runoff_votes(room["id"])
+        )
+
     return render_template(
         "results.html",
         room=room,
@@ -662,7 +679,134 @@ def results_page(code: str):
         participants_count=len(participants),
         voting_method=voting_method,
         ballots=ballots,
+        runoff_results=runoff_results,
+        can_start_runoff=(
+            is_host and room["phase"] == "results"
+            and not room.get("runoff_status") and len(results) >= 2
+        ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Runoff — top 3 from the results, one vote each
+# ---------------------------------------------------------------------------
+
+def _runoff_candidates(room: dict) -> list[dict]:
+    suggestions = get_suggestions(room["id"])
+    return get_runoff_candidates(calculate_results(room["id"], suggestions))
+
+
+@app.route("/room/<code>/runoff/start", methods=["POST"])
+def start_runoff(code: str):
+    if not session.get("is_host") or session.get("room_code") != code:
+        flash("Only the host can start a runoff.", "error")
+        return redirect(url_for("results_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room:
+        flash("Room not found.", "error")
+        return redirect(url_for("home"))
+
+    if room["phase"] != "results" or room.get("runoff_status"):
+        return redirect(url_for("results_page", code=code))
+
+    try:
+        set_runoff_status(room["id"], "voting")
+    except DB_ERRORS:
+        app.logger.exception("Starting runoff failed")
+        flash("Couldn't start the runoff. Please try again.", "error")
+        return redirect(url_for("results_page", code=code))
+
+    return redirect(url_for("runoff_page", code=code))
+
+
+@app.route("/room/<code>/runoff", methods=["GET"])
+def runoff_page(code: str):
+    room = get_room_by_code(code)
+    if not room:
+        flash("That room doesn't exist.", "error")
+        return redirect(url_for("home"))
+
+    display_name, is_host = _require_session(code)
+    if display_name is None:
+        return redirect(url_for("join_room_page", code=code))
+
+    if room.get("runoff_status") != "voting":
+        return redirect(url_for("results_page", code=code))
+
+    votes        = get_runoff_votes(room["id"])
+    participants = get_participants(room["id"])
+    my_pick      = next(
+        (v["suggestion_id"] for v in votes if v["participant_name"] == display_name),
+        None,
+    )
+
+    return render_template(
+        "runoff.html",
+        room=room,
+        display_name=display_name,
+        is_host=is_host,
+        candidates=_runoff_candidates(room),
+        my_pick=my_pick,
+        voters_count=len({v["participant_name"] for v in votes}),
+        participants_count=len(participants),
+    )
+
+
+@app.route("/room/<code>/runoff", methods=["POST"])
+def runoff_submit(code: str):
+    display_name, _ = _require_session(code)
+    if display_name is None:
+        return redirect(url_for("join_room_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room:
+        flash("Room not found.", "error")
+        return redirect(url_for("home"))
+
+    pick = request.form.get("suggestion_id", "").strip()
+    if not pick:
+        flash("Pick one option before submitting.", "error")
+        return redirect(url_for("runoff_page", code=code))
+
+    candidate_ids = {c["id"] for c in _runoff_candidates(room)}
+    try:
+        save_runoff_vote(room["id"], display_name, pick, candidate_ids)
+    except DB_ERRORS as e:
+        flash(str(e), "error")
+        return redirect(url_for("runoff_page", code=code))
+
+    participants = get_participants(room["id"])
+    if has_everyone_runoff_voted(room["id"], participants):
+        try:
+            set_runoff_status(room["id"], "done")
+        except DB_ERRORS:
+            pass  # poll will catch it
+        return redirect(url_for("results_page", code=code))
+
+    flash("Vote submitted! You can change it until the runoff closes.", "success")
+    return redirect(url_for("runoff_page", code=code))
+
+
+@app.route("/room/<code>/runoff/finish", methods=["POST"])
+def finish_runoff(code: str):
+    if not session.get("is_host") or session.get("room_code") != code:
+        flash("Only the host can do this.", "error")
+        return redirect(url_for("runoff_page", code=code))
+
+    room = get_room_by_code(code)
+    if not room:
+        flash("Room not found.", "error")
+        return redirect(url_for("home"))
+
+    if room.get("runoff_status") == "voting":
+        try:
+            set_runoff_status(room["id"], "done")
+        except DB_ERRORS as e:
+            flash(str(e), "error")
+            return redirect(url_for("runoff_page", code=code))
+
+    return redirect(url_for("results_page", code=code))
 
 
 # ---------------------------------------------------------------------------
@@ -721,6 +865,18 @@ def api_participants(code: str):
         except (ValueError, RuntimeError):
             pass
 
+    # Close the runoff once everyone has picked
+    runoff_status = room.get("runoff_status")
+    runoff_voters_count = 0
+    if current_phase == "results" and runoff_status == "voting":
+        runoff_voters_count = len({v["participant_name"] for v in get_runoff_votes(room["id"])})
+        if has_everyone_runoff_voted(room["id"], participants):
+            try:
+                set_runoff_status(room["id"], "done")
+                runoff_status = "done"
+            except DB_ERRORS:
+                pass
+
     # Expire lobby rooms where only the host is present after 10 minutes
     if current_phase == "lobby" and len(participants) == 1:
         created_at_str = room.get("created_at", "")
@@ -742,7 +898,9 @@ def api_participants(code: str):
         "voting_method":      room.get("voting_method", "borda"),
         "results_anonymous":  room.get("results_anonymous", True),
         "phase_deadline":     phase_deadline,
-        "server_now":         datetime.now(timezone.utc).isoformat(),
+        "runoff_status":      runoff_status,
+        "runoff_voters_count": runoff_voters_count,
+        "server_now":        datetime.now(timezone.utc).isoformat(),
     })
 
 
