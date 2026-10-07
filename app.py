@@ -31,6 +31,7 @@ from services.suggestion_service import (
     get_done_participants,
 )
 from services.ai_service import generate_suggestion_description
+from services import movie_service
 from services.voting_service import (
     save_vote,
     get_vote_by_participant,
@@ -375,6 +376,7 @@ def suggestions_page(code: str):
         slots_remaining=slots_remaining,
         participants=participants,
         suggestions_done=suggestions_done,
+        movie_search=movie_service.is_enabled() and movie_service.is_movie_room(room["title"]),
         phase_deadline=_phase_deadline(room),
         server_now=datetime.now(timezone.utc).isoformat(),
     )
@@ -938,6 +940,28 @@ def api_describe_suggestion(code: str, suggestion_id: str):
         pass
 
     return jsonify({"description": description})
+
+
+@app.route("/api/movies/search")
+def api_movie_search():
+    """
+    GET /api/movies/search?q=<text>
+    Returns up to 8 TMDB movies matching the text, for the suggestion dropdown.
+    Only available to people in a room, so this isn't an open TMDB proxy.
+    """
+    if "display_name" not in session:
+        return jsonify({"error": "Not in a room."}), 401
+
+    query = request.args.get("q", "").strip()[:100]
+    try:
+        movies = movie_service.search_movies(query)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception:
+        app.logger.exception("Movie search failed for %r", query)
+        return jsonify({"error": "Movie search is unavailable right now."}), 502
+
+    return jsonify({"movies": movies})
 
 
 @app.route("/api/nearby-rooms")

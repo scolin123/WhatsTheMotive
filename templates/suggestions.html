@@ -82,17 +82,27 @@
           <label class="form__label" for="suggestion_text">
             {% if room.room_mode == 'preset' %}Add an option{% else %}Add a suggestion{% endif %}
           </label>
-          <div class="suggestion-input-row">
+          <div class="suggestion-input-row{% if movie_search %} movie-search{% endif %}">
             <input
               class="form__input"
               type="text"
               id="suggestion_text"
               name="suggestion_text"
-              placeholder="{% if room.room_mode == 'preset' %}e.g. The Blarney Stone{% else %}Your Suggestion...!{% endif %}"
+              placeholder="{% if movie_search %}Search for a movie...{% elif room.room_mode == 'preset' %}e.g. The Blarney Stone{% else %}Your Suggestion...!{% endif %}"
               required
               autocomplete="off"
               maxlength="120"
+              {% if movie_search %}
+              data-movie-search
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="movie-results"
+              {% endif %}
             >
+            {% if movie_search %}
+            <ul id="movie-results" class="movie-results" role="listbox" hidden></ul>
+            {% endif %}
             <button class="btn btn--primary" type="submit">Add</button>
           </div>
         </div>
@@ -359,4 +369,7 @@
   setInterval(refreshSuggestions, POLL_MS);
 </script>
 <script src="{{ url_for('static', filename='js/ai-description.js') }}"></script>
+{% if movie_search %}
+<script src="{{ url_for('static', filename='js/movie-search.js') }}"></script>
+{% endif %}
 {% endblock %}
