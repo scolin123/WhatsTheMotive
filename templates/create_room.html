@@ -207,6 +207,25 @@
         <input type="hidden" name="host_lng" id="host-lng">
       </section>
 
+      <div id="location-blocked-overlay" class="confirm-overlay" hidden>
+        <div class="confirm-dialog location-dialog" role="dialog" aria-modal="true" aria-labelledby="location-blocked-title">
+          <h3 class="location-dialog__title" id="location-blocked-title">Location is blocked</h3>
+          <p class="confirm-dialog__message">
+            Your browser is set to block location for this site, so it won’t ask again on its own.
+          </p>
+          <ol class="location-dialog__steps">
+            <li>Click the icon to the left of the web address.</li>
+            <li>Set <strong>Location</strong> to <strong>Allow</strong>.</li>
+            <li>Come back here and press <strong>Try again</strong>.</li>
+          </ol>
+          <p class="location-dialog__note" id="location-blocked-note" role="status" hidden></p>
+          <div class="confirm-dialog__actions">
+            <button type="button" class="btn btn--ghost" id="location-dismiss">Not now</button>
+            <button type="button" class="btn btn--primary" id="location-retry">Try again</button>
+          </div>
+        </div>
+      </div>
+
       <button class="btn btn--primary btn--full btn--large" type="submit">Create room</button>
 
     </form>
@@ -223,31 +242,85 @@
           return;
         }
 
-        checkbox.addEventListener('change', function () {
-          if (!this.checked) {
-            latInput.value = '';
-            lngInput.value = '';
-            statusEl.textContent = '';
-            return;
-          }
+        var dialog      = document.getElementById('location-blocked-overlay');
+        var dialogNote  = document.getElementById('location-blocked-note');
+        var retryBtn    = document.getElementById('location-retry');
+        var dismissBtn  = document.getElementById('location-dismiss');
 
+        function clearLocation(message) {
+          checkbox.checked = false;
+          latInput.value   = '';
+          lngInput.value   = '';
+          statusEl.textContent = message || '';
+        }
+
+        // Once location is blocked, the browser won't show its own prompt
+        // again, so explain how to unblock it and let them retry from here.
+        function showBlockedDialog(note) {
+          dialogNote.textContent = note || '';
+          dialogNote.hidden = !note;
+          dialog.removeAttribute('hidden');
+          retryBtn.focus();
+        }
+
+        function hideBlockedDialog() {
+          dialog.setAttribute('hidden', '');
+        }
+
+        function requestLocation(fromRetry) {
+          checkbox.checked = true;
           statusEl.textContent = 'Requesting location…';
 
           navigator.geolocation.getCurrentPosition(
             function (pos) {
+              hideBlockedDialog();
               latInput.value = pos.coords.latitude;
               lngInput.value = pos.coords.longitude;
               statusEl.textContent = 'Location captured — your room will show up nearby.';
             },
-            function () {
-              checkbox.checked = false;
-              latInput.value   = '';
-              lngInput.value   = '';
-              statusEl.textContent = 'Location access denied — your room won’t appear nearby.';
+            function (err) {
+              if (err.code === err.PERMISSION_DENIED) {
+                clearLocation('Location is blocked — your room won’t appear nearby.');
+                showBlockedDialog(fromRetry ? 'Location is still blocked. Check the setting and try again.' : '');
+              } else {
+                hideBlockedDialog();
+                clearLocation('Couldn’t get your location. Try again in a moment.');
+              }
             },
             { timeout: 8000, maximumAge: 60000 }
           );
+        }
+
+        checkbox.addEventListener('change', function () {
+          if (!this.checked) {
+            clearLocation();
+            return;
+          }
+          requestLocation(false);
         });
+
+        retryBtn.addEventListener('click', function () {
+          requestLocation(true);
+        });
+
+        dismissBtn.addEventListener('click', function () {
+          hideBlockedDialog();
+          clearLocation('Location is off — your room won’t appear nearby.');
+        });
+
+        dialog.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') dismissBtn.click();
+        });
+
+        // If they unblock location in the browser while the popup is open,
+        // pick it up straight away instead of waiting for "Try again".
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions.query({ name: 'geolocation' }).then(function (status) {
+            status.addEventListener('change', function () {
+              if (status.state === 'granted' && !dialog.hidden) requestLocation(false);
+            });
+          }).catch(function () {});
+        }
       })();
     </script>
   </div>

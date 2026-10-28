@@ -1960,3 +1960,36 @@ input[type="checkbox"] {
   border-radius: var(--radius-xs);
   background:    var(--bg-elevated);
 }
+
+/* ── Location blocked dialog (create room) ──────────────────── */
+.location-dialog { max-width: 400px; text-align: left; }
+
+.location-dialog__title {
+  font-family:   var(--font-display);
+  font-size:     1.25rem;
+  margin-bottom: 0.5rem;
+  color:         var(--text);
+}
+
+.location-dialog .confirm-dialog__message {
+  font-size:     0.95rem;
+  color:         var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.location-dialog__steps {
+  margin:      0 0 1rem 1.2rem;
+  padding:     0;
+  font-size:   0.92rem;
+  line-height: 1.6;
+  color:       var(--text);
+}
+
+.location-dialog__note {
+  margin-bottom: 1rem;
+  font-size:     0.88rem;
+  font-weight:   600;
+  color:         var(--danger);
+}
+
+.location-dialog .confirm-dialog__actions { justify-content: flex-end; }
