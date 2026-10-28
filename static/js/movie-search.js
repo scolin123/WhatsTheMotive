@@ -107,7 +107,7 @@
     if (posterInput) posterInput.value = "";
     clearTimeout(timer);
     const query = input.value.trim();
-    if (query.length < 2) {
+    if (query.length < 3) {
       if (controller) controller.abort();
       return close();
     }

@@ -67,6 +67,18 @@
 
     </form>
 
+    {# ── Rooms near you ─────────────────────────────────────────────
+       Asks for location only when tapped (browsers show the permission
+       prompt reliably after a tap, not on page load). Future idea: open a
+       map with a pin at each host's location instead of this list. #}
+    <div class="nearby-join" style="margin-top: 1rem;">
+      <button class="btn btn--secondary btn--full" type="button" id="nearby-btn">
+        Join a room near you
+      </button>
+      <p class="form__hint" id="nearby-status" role="status" aria-live="polite"></p>
+      <ul class="nearby__list" id="nearby-list" hidden></ul>
+    </div>
+
     <p class="card__footer-note">
       Don't have a code?
       <a href="{{ url_for('create_room_page') }}">Create your own room</a>
@@ -84,5 +96,99 @@
     codeInput.value = codeInput.value.toUpperCase();
     codeInput.setSelectionRange(pos, pos);
   });
+
+  // ── Rooms near you ────────────────────────────────────────────
+  (function () {
+    var btn      = document.getElementById('nearby-btn');
+    var statusEl = document.getElementById('nearby-status');
+    var listEl   = document.getElementById('nearby-list');
+    var nameInput = document.getElementById('display_name');
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function formatDistance(km) {
+      if (typeof km !== 'number' || isNaN(km)) return '';
+      if (km < 1) return Math.max(1, Math.round(km * 1000)) + ' m away';
+      return km.toFixed(1) + ' km away';
+    }
+
+    function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+    function showRooms(rooms) {
+      listEl.innerHTML = rooms.map(function (room) {
+        var dist = formatDistance(room.distance_km);
+        return '<li class="room-card">' +
+          '<div class="room-card__body">' +
+            '<span class="room-card__title">' + escapeHtml(room.host_name) + "'s " + escapeHtml(room.title) + '</span>' +
+            '<span class="room-card__meta">' + escapeHtml(room.code) + (dist ? ' · ' + dist : '') + '</span>' +
+          '</div>' +
+          '<button type="button" class="btn btn--secondary btn--small" data-code="' + escapeHtml(room.code) + '">Join</button>' +
+        '</li>';
+      }).join('');
+      listEl.hidden = false;
+    }
+
+    // Tapping Join on a nearby room fills in its code, then asks for a name.
+    listEl.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-code]');
+      if (!b) return;
+      codeInput.value = b.getAttribute('data-code');
+      setStatus('Code filled in. Enter your name and press Join Room.');
+      nameInput.focus();
+    });
+
+    btn.addEventListener('click', function () {
+      listEl.hidden = true;
+      listEl.innerHTML = '';
+
+      if (!navigator.geolocation) {
+        setStatus('Your browser can’t share location, so nearby rooms aren’t available.');
+        return;
+      }
+
+      btn.disabled = true;
+      setStatus('Finding rooms near you…');
+
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          fetch('/api/nearby-rooms?lat=' + pos.coords.latitude + '&lng=' + pos.coords.longitude, {
+            headers: { 'Accept': 'application/json' }
+          })
+            .then(function (r) {
+              if (!r.ok) throw new Error('bad status ' + r.status);
+              return r.json();
+            })
+            .then(function (data) {
+              var rooms = (data && data.rooms) || [];
+              if (!rooms.length) {
+                setStatus('No open rooms within 1 km. Rooms show up for 10 minutes after the host creates them, and only if the host turned on “Share location”.');
+              } else {
+                setStatus(rooms.length === 1 ? '1 room near you:' : rooms.length + ' rooms near you:');
+                showRooms(rooms);
+              }
+            })
+            .catch(function () {
+              setStatus('Couldn’t check for nearby rooms right now. Try again in a moment.');
+            })
+            .finally(function () { btn.disabled = false; });
+        },
+        function (err) {
+          btn.disabled = false;
+          if (err && err.code === 1) {
+            setStatus('Location is blocked for this site. Tap the icon next to the web address, set Location to Allow, then try again.');
+          } else if (err && err.code === 3) {
+            setStatus('Getting your location timed out. Try again.');
+          } else {
+            setStatus('Couldn’t get your location. Check that location is turned on for your device.');
+          }
+        },
+        { timeout: 10000, maximumAge: 60000 }
+      );
+    });
+  })();
 </script>
 {% endblock %}

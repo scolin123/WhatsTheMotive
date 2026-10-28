@@ -82,6 +82,6 @@ def search_movies(query: str) -> list[dict]:
     if not is_enabled():
         raise RuntimeError("TMDB_API_KEY is not set.")
     query = " ".join(query.lower().split())
-    if len(query) < 2:
+    if len(query) < 3:
         return []
     return list(_search(query))
