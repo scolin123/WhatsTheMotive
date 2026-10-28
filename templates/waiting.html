@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Waiting to join — WTM{% endblock %}
+
+{% block content %}
+<div class="page-wrapper">
+  <div class="card">
+
+    <div class="card__header">
+      <a href="{{ url_for('join_room_page') }}" class="back-link">← cancel</a>
+      <h2 class="card__title">Waiting for the host</h2>
+      <p class="card__subtitle" id="waiting-text">
+        <strong>{{ room.host_name }}</strong> needs to accept you into
+        <strong>{{ room.title }}</strong>. Keep this page open.
+      </p>
+    </div>
+
+    <p class="form__hint" id="waiting-status" role="status" aria-live="polite">
+      Request sent as <strong>{{ display_name }}</strong>…
+    </p>
+
+    <div id="waiting-result" hidden>
+      <a href="{{ url_for('join_room_page', code=room.room_code) }}" class="btn btn--secondary btn--full">
+        Back to Join
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var CODE = {{ room.room_code | tojson }};
+    var statusEl = document.getElementById('waiting-status');
+    var resultEl = document.getElementById('waiting-result');
+    var timer = null;
+
+    function finish(message) {
+      clearInterval(timer);
+      statusEl.textContent = message;
+      resultEl.hidden = false;
+    }
+
+    function check() {
+      fetch('/api/room/' + encodeURIComponent(CODE) + '/join-status', {
+        headers: { 'Accept': 'application/json' }
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          var s = res.data && res.data.status;
+          if (s === 'approved') {
+            clearInterval(timer);
+            statusEl.textContent = 'You’re in! Joining…';
+            window.location.href = res.data.redirect;
+          } else if (s === 'denied') {
+            finish('The host didn’t let you in.');
+          } else if (s === 'closed') {
+            finish('This room has already started, so you can’t join anymore.');
+          } else if (!res.ok) {
+            finish('This request has expired. Go back and try joining again.');
+          }
+        })
+        .catch(function () {});
+    }
+
+    timer = setInterval(check, 2000);
+    check();
+  })();
+</script>
+{% endblock %}

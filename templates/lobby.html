@@ -80,6 +80,13 @@
             <span class="info-value">{{ room.host_name }}</span>
           </div>
 
+          {% if room.is_private %}
+          <div class="info-item">
+            <span class="info-label">Access</span>
+            <span class="info-value">Private · host approves joiners</span>
+          </div>
+          {% endif %}
+
           <div class="info-item">
             <span class="info-label">Participants</span>
             <span class="info-value">
@@ -116,6 +123,15 @@
       </div>
 
       <div class="panel">
+        {% if is_host and room.is_private %}
+        {# Pending join requests: only the host of a private room sees this. #}
+        <div id="requests-panel" hidden style="margin-bottom: 1.25rem;">
+          <h2 class="panel-title">Join requests</h2>
+          <ul id="requests-list" class="participants-list"></ul>
+          <p class="form__hint" id="requests-error" role="status" aria-live="polite"></p>
+        </div>
+        {% endif %}
+
         <h2 class="panel-title">Joined Participants</h2>
 
         <ul id="participants-list" class="participants-list">
@@ -238,6 +254,52 @@
     }).catch(() => {});
   }
 
+  // ── Join requests (host of a private room) ───────────────────────
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderJoinRequests(requests) {
+    const panel = document.getElementById('requests-panel');
+    const list  = document.getElementById('requests-list');
+    if (!panel || !list) return;           // not the host of a private room
+    requests = Array.isArray(requests) ? requests : [];
+    panel.hidden = requests.length === 0;
+    list.innerHTML = requests.map(r => `
+      <li class="participant-item">
+        <span class="participant-avatar">${escapeHtml((r.display_name || '?').charAt(0).toUpperCase())}</span>
+        <span class="participant-name">${escapeHtml(r.display_name)}</span>
+        <button type="button" class="btn btn--primary btn--small"
+                data-name="${escapeHtml(r.display_name)}" data-action="approve">Accept</button>
+        <button type="button" class="btn btn--ghost btn--small"
+                data-name="${escapeHtml(r.display_name)}" data-action="deny">Deny</button>
+      </li>`).join('');
+  }
+
+  const requestsList = document.getElementById('requests-list');
+  if (requestsList) {
+    requestsList.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const errEl = document.getElementById('requests-error');
+      requestsList.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      try {
+        const resp = await fetch(`/room/${ROOM_CODE}/join-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: btn.dataset.name, action: btn.dataset.action }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (errEl) errEl.textContent = resp.ok ? '' : (result.error || 'Something went wrong.');
+      } catch (err) {
+        if (errEl) errEl.textContent = 'Couldn’t reach the server. Try again.';
+      }
+      refreshParticipants();
+    });
+  }
+
   // ── Poll participants ────────────────────────────────────────────
   async function refreshParticipants() {
     if (!ROOM_CODE) return;
@@ -268,6 +330,8 @@
       return;
     }
 
+    renderJoinRequests(data.join_requests);
+
     const list  = document.getElementById('participants-list');
     const count = document.getElementById('participant-count');
     if (!list || !count) return;
@@ -280,11 +344,12 @@
     }
 
     list.innerHTML = data.participants.map(p => {
-      const name   = p.display_name || 'Unknown';
-      const avatar = p.avatar;
+      const rawName = p.display_name || 'Unknown';
+      const name    = escapeHtml(rawName);
+      const avatar  = escapeHtml(p.avatar || '');
       const avatarHtml = avatar
         ? `<img src="/static/images/${avatar}" alt="${name}" class="participant-avatar participant-avatar--img">`
-        : `<span class="participant-avatar">${name.charAt(0).toUpperCase()}</span>`;
+        : `<span class="participant-avatar">${escapeHtml(rawName.charAt(0).toUpperCase())}</span>`;
       return `
         <li class="participant-item">
           ${avatarHtml}

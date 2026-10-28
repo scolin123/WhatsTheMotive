@@ -126,19 +126,27 @@
             '<span class="room-card__title">' + escapeHtml(room.host_name) + "'s " + escapeHtml(room.title) + '</span>' +
             '<span class="room-card__meta">' + escapeHtml(room.code) + (dist ? ' · ' + dist : '') + '</span>' +
           '</div>' +
-          '<button type="button" class="btn btn--secondary btn--small" data-code="' + escapeHtml(room.code) + '">Join</button>' +
+          '<button type="button" class="btn btn--secondary btn--small" data-code="' + escapeHtml(room.code) + '">' +
+            (room.is_private ? 'Ask to join' : 'Join') + '</button>' +
         '</li>';
       }).join('');
       listEl.hidden = false;
     }
 
-    // Tapping Join on a nearby room fills in its code, then asks for a name.
+    // Tapping Join on a nearby room joins it straight away. A name is the one
+    // thing we can't guess, so if it's empty we ask for it first; pressing
+    // Enter (or Join again) then finishes the job.
     listEl.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-code]');
       if (!b) return;
       codeInput.value = b.getAttribute('data-code');
-      setStatus('Code filled in. Enter your name and press Join Room.');
-      nameInput.focus();
+      if (nameInput.value.trim()) {
+        setStatus('Joining…');
+        document.querySelector('form.form').requestSubmit();
+      } else {
+        setStatus('Enter your name, then tap Join again.');
+        nameInput.focus();
+      }
     });
 
     btn.addEventListener('click', function () {

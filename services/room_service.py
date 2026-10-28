@@ -44,9 +44,12 @@ def create_room(
     reveal_rankings: bool = False,
     host_lat: float | None = None,
     host_lng: float | None = None,
+    is_private: bool = False,
 ) -> dict:
     """
     Create a new room and immediately add the host as the first participant.
+
+    A private room (is_private=True) makes the host approve each joiner.
     """
     host_name = host_name.strip()
     title = title.strip()
@@ -80,6 +83,10 @@ def create_room(
     if host_lat is not None and host_lng is not None:
         room_data["host_lat"] = host_lat
         room_data["host_lng"] = host_lng
+    if is_private:
+        # Only sent when true so public rooms keep working even before the
+        # is_private column has been added to the database.
+        room_data["is_private"] = True
 
     room_resp = supabase.table("rooms").insert(room_data).execute()
 
@@ -122,7 +129,7 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
 
     resp = (
         supabase.table("rooms")
-        .select("room_code, title, host_name, phase, host_lat, host_lng")
+        .select("*")
         .eq("phase", "lobby")
         .not_.is_("host_lat", "null")
         .not_.is_("host_lng", "null")
@@ -139,6 +146,7 @@ def get_nearby_rooms(lat: float, lng: float, radius_km: float = 1.0) -> list[dic
                 "host_name":   room["host_name"],
                 "code":        room["room_code"],
                 "distance_km": round(dist, 2),
+                "is_private":  bool(room.get("is_private")),
             })
 
     return sorted(results, key=lambda r: r["distance_km"])
