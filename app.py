@@ -32,6 +32,13 @@ from services.suggestion_service import (
 )
 from services.ai_service import generate_suggestion_description
 from services import movie_service
+from services.join_service import (
+    create_request,
+    get_pending_requests,
+    get_request_status,
+    resolve_request,
+    claim_approved,
+)
 from services.voting_service import (
     save_vote,
     get_vote_by_participant,
@@ -138,6 +145,8 @@ def create_room_submit():
     # Only meaningful for the ranking (Borda) method — the checkbox is hidden
     # for elimination, but guard here too so a stray value can't sneak through.
     reveal_rankings = request.form.get("reveal_rankings") == "on" and voting_method == "borda"
+    # Private room: the host approves each person who asks to join.
+    is_private = request.form.get("is_private") == "on"
 
     host_lat = host_lng = None
     raw_lat  = request.form.get("host_lat", "").strip()
@@ -193,6 +202,7 @@ def create_room_submit():
             reveal_rankings=reveal_rankings,
             host_lat=host_lat,
             host_lng=host_lng,
+            is_private=is_private,
         )
     except DB_ERRORS as e:
         app.logger.exception("Room creation failed")
@@ -257,6 +267,20 @@ def join_room_submit():
             "join_room.html", prefill_code=room_code, form_data=request.form
         ), 400
 
+    # Private room: don't add them yet. File a request and wait for the host.
+    if room.get("is_private"):
+        try:
+            create_request(room["id"], display_name)
+        except ValueError as e:
+            flash(str(e), "error")
+            return render_template(
+                "join_room.html", prefill_code=room_code, form_data=request.form
+            ), 400
+
+        session["pending_room_code"] = room["room_code"]
+        session["pending_name"]      = display_name
+        return redirect(url_for("waiting_page", code=room["room_code"]))
+
     try:
         add_participant(room_id=room["id"], display_name=display_name)
     except ValueError as e:
@@ -271,6 +295,85 @@ def join_room_submit():
     session["is_host"]      = False
 
     return redirect(url_for("lobby", code=room["room_code"]))
+
+
+# ---------------------------------------------------------------------------
+# Private rooms: waiting for the host, and the host's accept / deny
+# ---------------------------------------------------------------------------
+
+@app.route("/room/<code>/waiting")
+def waiting_page(code: str):
+    room = get_room_by_code(code)
+    if not room:
+        flash("That room doesn't exist.", "error")
+        return redirect(url_for("home"))
+
+    if (
+        not session.get("pending_name")
+        or session.get("pending_room_code") != room["room_code"]
+    ):
+        return redirect(url_for("join_room_page", code=code))
+
+    return render_template(
+        "waiting.html", room=room, display_name=session["pending_name"]
+    )
+
+
+@app.route("/api/room/<code>/join-status")
+def api_join_status(code: str):
+    """Polled by the waiting page: pending / approved / denied / closed."""
+    room = get_room_by_code(code)
+    name = session.get("pending_name")
+    if not room or not name or session.get("pending_room_code") != room["room_code"]:
+        return jsonify({"status": "none"}), 404
+
+    status = get_request_status(room["id"], name)
+
+    if status == "approved":
+        # The host said yes: add them to the room now (from their own browser,
+        # so someone who left never becomes a ghost participant), then sign in.
+        try:
+            claim_approved(room["id"], name)
+        except ValueError:
+            return jsonify({"status": "closed"})
+        session["room_code"]    = room["room_code"]
+        session["room_id"]      = room["id"]
+        session["display_name"] = name
+        session["is_host"]      = False
+        session.pop("pending_name", None)
+        session.pop("pending_room_code", None)
+        return jsonify({
+            "status":   "approved",
+            "redirect": url_for("lobby", code=room["room_code"]),
+        })
+
+    if room["phase"] != "lobby":
+        return jsonify({"status": "closed"})
+
+    return jsonify({"status": status or "none"})
+
+
+@app.route("/room/<code>/join-requests", methods=["POST"])
+def resolve_join_request(code: str):
+    """Host only: accept or deny one person's request. JSON {name, action}."""
+    room = get_room_by_code(code)
+    if not room:
+        return jsonify({"ok": False, "error": "Room not found."}), 404
+    if not session.get("is_host") or session.get("room_code") != room["room_code"]:
+        return jsonify({"ok": False, "error": "Only the host can do this."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    name    = str(payload.get("name", "")).strip()
+    action  = payload.get("action")
+    if not name or action not in ("approve", "deny"):
+        return jsonify({"ok": False, "error": "Invalid request."}), 400
+
+    try:
+        resolve_request(room["id"], name, action == "approve")
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 409
+
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -960,8 +1063,22 @@ def api_participants(code: str):
             except (ValueError, RuntimeError):
                 pass
 
+    # Pending join requests: only the host of a private room, only in the lobby.
+    join_requests = []
+    if (
+        current_phase == "lobby"
+        and room.get("is_private")
+        and session.get("is_host")
+        and session.get("room_code") == room["room_code"]
+    ):
+        try:
+            join_requests = get_pending_requests(room["id"])
+        except DB_ERRORS:
+            pass
+
     return jsonify({
         "phase":              current_phase,
+        "join_requests":      join_requests,
         "participants":       participants,
         "voters_count":       len(voters),
         "participants_count": len(participants),
