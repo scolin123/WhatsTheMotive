@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: whatsthemotive
+    name: whatsthemove
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # Threads let several players' polls run at once instead of queueing behind
+    # one another; each request mostly waits on Supabase, so threads help a lot.
+    startCommand: gunicorn app:app --workers 2 --threads 8 --timeout 60
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0

@@ -35,12 +35,24 @@
     timerEl.classList.toggle("timer--urgent", remaining <= 30 && remaining > 0);
     if (remaining === 0) {
       timerEl.textContent = "00:00";
+      autoSubmitRanking();
       pollStatus();
     }
   }
 
   setInterval(updateTimer, 1000);
   updateTimer();
+
+  // When the timer hits zero, submit whatever order is on screen, unless the
+  // current order has already been saved ("Submitted!" state).
+  var autoSubmitted = false; // var: updateTimer() runs once before this line
+  function autoSubmitRanking() {
+    if (autoSubmitted || !submitBtn) return;
+    if (submitBtn.classList.contains("btn--submitted") || submitBtn.disabled) return;
+    autoSubmitted = true;
+    syncRankingState();
+    submitBtn.closest("form").requestSubmit();
+  }
 
   function getRankItems() {
     return Array.from(rankingList.querySelectorAll(".rank-item"));
@@ -59,7 +71,36 @@
     rankedIdsInput.value = items.map((item) => item.dataset.id).join(",");
   }
 
+  // ── Draft autosave ─────────────────────────────────────────────
+  // Sends the current order to the server shortly after every change, so the
+  // order still counts if this tab is closed or the phone is locked when the
+  // timer ends. Drafts only become ballots if the person never presses Submit.
+  let draftTimer = null;
+  function sendDraft() {
+    if (!ROOM_CODE) return;
+    syncRankingState();
+    fetch(`/room/${ROOM_CODE}/voting/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ranked_ids: rankedIdsInput.value }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+  function scheduleDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(sendDraft, 600);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && draftTimer) {
+      clearTimeout(draftTimer);
+      draftTimer = null;
+      sendDraft();
+    }
+  });
+
   function resetSubmitButton() {
+    // Called after every user reorder (arrows and drag-and-drop).
+    scheduleDraft();
     if (!submitBtn || !submitBtn.classList.contains("btn--submitted")) return;
     submitBtn.classList.replace("btn--submitted", "btn--primary");
     submitBtn.textContent = "Submit Ranking";
@@ -231,10 +272,12 @@
     progressFillEl.style.width = `${progressFillEl.dataset.pct || 0}%`;
   }
 
+  // The button turns to "Submitted!" only when the server renders the page
+  // after a successful save (has_voted), never optimistically on click.
   if (submitBtn) {
     submitBtn.closest("form").addEventListener("submit", () => {
-      submitBtn.classList.replace("btn--primary", "btn--submitted");
-      submitBtn.textContent = "Submitted!";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting…";
     });
   }
 

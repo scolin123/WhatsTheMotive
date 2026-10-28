@@ -140,7 +140,7 @@ def save_ai_description(suggestion_id: str, description: str) -> None:
     ).eq("id", suggestion_id).execute()
 
 
-def get_suggestion_counts(room_id: str) -> dict[str, int]:
+def get_suggestion_counts(room_id: str, suggestions: list[dict] | None = None) -> dict[str, int]:
     """
     Return a dict mapping each participant_name to their submission count.
     Useful for showing progress on the suggestions page.
@@ -151,7 +151,8 @@ def get_suggestion_counts(room_id: str) -> dict[str, int]:
     Returns:
         e.g. {"Alex": 2, "Jordan": 1}
     """
-    suggestions = get_suggestions(room_id)
+    if suggestions is None:
+        suggestions = get_suggestions(room_id)
     counts: dict[str, int] = {}
     for s in suggestions:
         name = s["participant_name"]
@@ -182,11 +183,15 @@ def has_everyone_suggested(
     room_id: str,
     participants: list[dict],
     suggestions_per_person: int,
+    suggestions: list[dict] | None = None,
 ) -> bool:
-    """Return True if every participant has hit their cap (or opted out with >=1) AND total >= 2."""
+    """Return True if every participant has hit their cap (or opted out with >=1) AND total >= 2.
+
+    Pass ``suggestions`` when the caller already has them, to skip a query.
+    """
     if not participants:
         return False
-    counts = get_suggestion_counts(room_id)
+    counts = get_suggestion_counts(room_id, suggestions)
     done = get_done_participants(room_id)
     all_names = {p["display_name"] for p in participants}
     for name in all_names:

@@ -409,3 +409,133 @@ def calculate_results(room_id: str, suggestions: list[dict]) -> list[dict]:
 
     # Default: Borda count
     return _calculate_borda(room_id, suggestions)
+
+# ---------------------------------------------------------------------------
+# Drafts — rankings saved while a participant is still on the voting page
+# ---------------------------------------------------------------------------
+# A draft is the order currently on someone's screen. It is NOT a vote and does
+# not count toward "everyone has voted". When voting closes, finalize_drafts()
+# turns the draft of every participant who never pressed Submit into a real
+# ballot, so a closed tab / locked phone / untouched list still gets counted.
+
+def save_draft(
+    room_id: str,
+    participant_name: str,
+    ranked_suggestion_ids: list[str],
+    trusted: bool = False,
+) -> None:
+    """Store (or replace) a participant's draft order while the room is in 'voting'.
+
+    ``trusted=True`` skips the phase and ID checks (two queries) for callers
+    that have just loaded the room and its suggestions themselves.
+    """
+    if not ranked_suggestion_ids:
+        return
+
+    if trusted:
+        ids = ranked_suggestion_ids
+    else:
+        room_resp = supabase.table("rooms").select("phase").eq("id", room_id).execute()
+        if not room_resp.data or room_resp.data[0]["phase"] != "voting":
+            raise ValueError("Voting is not open for this room right now.")
+
+        # Only accept IDs that really belong to this room's suggestions.
+        valid = {
+            s["id"]
+            for s in (
+                supabase.table("suggestions").select("id").eq("room_id", room_id).execute().data
+                or []
+            )
+        }
+        ids = [sid for sid in ranked_suggestion_ids if sid in valid]
+        if not ids:
+            raise ValueError("Those suggestions don't belong to this room.")
+
+    supabase.table("vote_drafts").upsert(
+        {
+            "room_id":          room_id,
+            "participant_name": participant_name,
+            "ranked_ids":       ids,
+        },
+        on_conflict="room_id,participant_name",
+    ).execute()
+
+
+def get_draft(room_id: str, participant_name: str) -> list[str]:
+    """Return a participant's draft order (suggestion IDs, best first), or []."""
+    resp = (
+        supabase.table("vote_drafts")
+        .select("ranked_ids")
+        .eq("room_id", room_id)
+        .eq("participant_name", participant_name)
+        .execute()
+    )
+    return (resp.data[0].get("ranked_ids") or []) if resp.data else []
+
+
+def finalize_drafts(room_id: str) -> int:
+    """
+    Promote drafts to real ballots for everyone who hasn't submitted one.
+    Safe to call repeatedly. Returns the number of ballots created.
+    """
+    drafts = (
+        supabase.table("vote_drafts")
+        .select("participant_name, ranked_ids")
+        .eq("room_id", room_id)
+        .execute()
+        .data
+        or []
+    )
+    if not drafts:
+        return 0
+
+    already_voted = set(get_voters(room_id))
+    suggestion_ids = [
+        s["id"]
+        for s in (
+            supabase.table("suggestions")
+            .select("id")
+            .eq("room_id", room_id)
+            .order("created_at")
+            .execute()
+            .data
+            or []
+        )
+    ]
+    valid = set(suggestion_ids)
+
+    created = 0
+    for draft in drafts:
+        name = draft["participant_name"]
+
+        # Claim the draft by deleting it: the delete returns the row only to
+        # the single request that removed it, so two people opening the results
+        # page at the same moment can't both insert a ballot.
+        claimed = (
+            supabase.table("vote_drafts")
+            .delete()
+            .eq("room_id", room_id)
+            .eq("participant_name", name)
+            .execute()
+        )
+        if not claimed.data or name in already_voted:
+            continue
+
+        ranked =[sid for sid in (draft.get("ranked_ids") or []) if sid in valid]
+        # Anything missing from the draft (e.g. added later) goes at the bottom.
+        ranked += [sid for sid in suggestion_ids if sid not in set(ranked)]
+        if not ranked:
+            continue
+        rows = [
+            {
+                "room_id":          room_id,
+                "participant_name": name,
+                "suggestion_id":    sid,
+                "rank":             i + 1,
+            }
+            for i, sid in enumerate(ranked)
+        ]
+        supabase.table("votes").insert(rows).execute()
+        created += 1
+
+    return created

@@ -39,6 +39,9 @@ from services.voting_service import (
     get_ballots,
     has_everyone_voted,
     calculate_results,
+    save_draft,
+    get_draft,
+    finalize_drafts,
 )
 from services.runoff_service import (
     set_runoff_status,
@@ -84,7 +87,11 @@ def _phase_deadline(room: dict) -> str | None:
     if not started:
         return None
     timer_secs = min(room.get("suggestions_per_person", 1), 5) * 60
-    dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+    if room.get("phase") == "voting":
+        # Ranking every movie takes longer than adding one, so give voting
+        # at least 3 minutes regardless of suggestions_per_person.
+        timer_secs = max(timer_secs, 180)
+    dt =datetime.fromisoformat(started.replace("Z", "+00:00"))
     return (dt + timedelta(seconds=timer_secs)).isoformat()
 
 
@@ -557,6 +564,23 @@ def voting_page(code: str):
         ordered  += [s for s in suggestions if s["id"] not in voted_set]
     else:
         ordered = suggestions
+        # Not submitted yet: restore their saved draft order, or save the
+        # default order as a draft right away. That way even someone who never
+        # touches the list (or closes the tab) still gets a ballot when voting
+        # closes.
+        try:
+            draft_ids = get_draft(room["id"], display_name)
+            if draft_ids:
+                by_id   = {s["id"]: s for s in suggestions}
+                ordered = [by_id[sid] for sid in draft_ids if sid in by_id]
+                seen    = set(draft_ids)
+                ordered += [s for s in suggestions if s["id"] not in seen]
+            else:
+                save_draft(
+                    room["id"], display_name, [s["id"] for s in suggestions], trusted=True
+                )
+        except DB_ERRORS:
+            pass  # Drafts are best-effort; the normal submit still works
 
     return render_template(
         "voting.html",
@@ -599,7 +623,7 @@ def voting_submit(code: str):
             participant_name=display_name,
             ranked_suggestion_ids=ranked_ids,
         )
-    except (ValueError, RuntimeError) as e:
+    except DB_ERRORS as e:
         flash(str(e), "error")
         return redirect(url_for("voting_page", code=code))
 
@@ -614,6 +638,28 @@ def voting_submit(code: str):
 
     flash("Vote submitted! You can update it any time before voting closes.", "success")
     return redirect(url_for("voting_page", code=code))
+
+
+@app.route("/room/<code>/voting/draft", methods=["POST"])
+def voting_draft(code: str):
+    """Autosave the order currently on a voter's screen (not a submitted vote)."""
+    display_name, _ = _require_session(code)
+    if display_name is None:
+        return jsonify({"ok": False}), 401
+
+    room = get_room_by_code(code)
+    if not room:
+        return jsonify({"ok": False}), 404
+
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("ranked_ids") or request.form.get("ranked_ids", "")
+    ranked_ids = [s.strip() for s in str(raw).split(",") if s.strip()]
+
+    try:
+        save_draft(room["id"], display_name, ranked_ids)
+    except DB_ERRORS:
+        return jsonify({"ok": False}), 409
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -660,6 +706,14 @@ def results_page(code: str):
 
     # Explicitly get the voting method to ensure the template receives it
     voting_method = room.get("voting_method", "borda")
+
+    # Voting is closed: turn saved drafts into ballots for anyone who never
+    # pressed Submit. Idempotent, so every visit can safely call it.
+    if room["phase"] == "results":
+        try:
+            finalize_drafts(room["id"])
+        except DB_ERRORS:
+            pass
 
     suggestions = get_suggestions(room["id"])
     results     = calculate_results(room["id"], suggestions)
@@ -844,14 +898,19 @@ def api_participants(code: str):
 
     current_phase  = room["phase"]
     phase_deadline = _phase_deadline(room)
+    # Voting gets a short grace period past the deadline so ballots that
+    # browsers auto-submit at 00:00 still arrive before the room closes.
+    grace = timedelta(seconds=15) if current_phase == "voting" else timedelta(0)
     timer_expired  = (
         phase_deadline is not None
-        and datetime.now(timezone.utc) >= datetime.fromisoformat(phase_deadline)
+        and datetime.now(timezone.utc) >= datetime.fromisoformat(phase_deadline) + grace
     )
 
     # Auto-advance to voting if everyone submitted or timer expired
     if current_phase == "suggesting" and (
-        timer_expired or has_everyone_suggested(room["id"], participants, room["suggestions_per_person"])
+        timer_expired or has_everyone_suggested(
+            room["id"], participants, room["suggestions_per_person"], all_suggestions
+        )
     ):
         try:
             update_phase(room["id"], "voting")
@@ -862,8 +921,13 @@ def api_participants(code: str):
             pass
 
     # Auto-advance to results if everyone voted or timer expired
+    # A timer expiry only counts if at least one ballot exists; otherwise the
+    # results would be empty and late voters would be locked out.
     if current_phase == "voting" and (
-        timer_expired or has_everyone_voted(room["id"], participants)
+        (timer_expired and len(voters) > 0)
+        # Same check as has_everyone_voted(), using the voters we already
+        # fetched above instead of querying the votes table a second time.
+        or (bool(participants) and {p["display_name"] for p in participants} == set(voters))
     ):
         try:
             update_phase(room["id"], "results")
