@@ -123,15 +123,6 @@
       </div>
 
       <div class="panel">
-        {% if is_host and room.is_private %}
-        {# Pending join requests: only the host of a private room sees this. #}
-        <div id="requests-panel" hidden style="margin-bottom: 1.25rem;">
-          <h2 class="panel-title">Join requests</h2>
-          <ul id="requests-list" class="participants-list"></ul>
-          <p class="form__hint" id="requests-error" role="status" aria-live="polite"></p>
-        </div>
-        {% endif %}
-
         <h2 class="panel-title">Joined Participants</h2>
 
         <ul id="participants-list" class="participants-list">
@@ -154,6 +145,17 @@
             <li class="participant-empty">No one has joined yet.</li>
           {% endfor %}
         </ul>
+
+        {% if is_host and room.is_private %}
+        {# Second section (below a divider): people waiting for the host to accept. #}
+        <div id="requests-panel" style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border, #e3e7ea);">
+          <h2 class="panel-title">Waiting to join</h2>
+          <ul id="requests-list" class="participants-list">
+            <li class="participant-empty">No one is waiting.</li>
+          </ul>
+          <p class="form__hint" id="requests-error" role="status" aria-live="polite"></p>
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -266,7 +268,10 @@
     const list  = document.getElementById('requests-list');
     if (!panel || !list) return;           // not the host of a private room
     requests = Array.isArray(requests) ? requests : [];
-    panel.hidden = requests.length === 0;
+    if (requests.length === 0) {
+      list.innerHTML = '<li class="participant-empty">No one is waiting.</li>';
+      return;
+    }
     list.innerHTML = requests.map(r => `
       <li class="participant-item">
         <span class="participant-avatar">${escapeHtml((r.display_name || '?').charAt(0).toUpperCase())}</span>
