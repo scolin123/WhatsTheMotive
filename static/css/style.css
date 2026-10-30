@@ -937,7 +937,7 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 .participant-remove:hover,
-.participant-remove:focus-visible { color: var(--text); }
+.participant-remove:focus-visible { color: var(--danger); }
 
 .host-tag {
   font-size:      0.63rem;
