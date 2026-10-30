@@ -16,6 +16,7 @@ from services.room_service import (
     get_nearby_rooms,
     get_room_by_code,
     add_participant,
+    remove_participant,
     get_participants,
     update_phase,
     set_avatar,
@@ -38,6 +39,7 @@ from services.join_service import (
     get_request_status,
     resolve_request,
     claim_approved,
+    needs_approval,
 )
 from services.voting_service import (
     save_vote,
@@ -110,6 +112,19 @@ def _require_session(code: str):
     if "display_name" not in session or session.get("room_code") != code:
         return None, None
     return session["display_name"], session.get("is_host", False)
+
+
+def _removed_redirect(code: str, participants: list[dict], display_name: str):
+    """
+    If the host removed this person from the room, clear their session and
+    return a redirect to the join page; otherwise return None.
+    """
+    if any(p["display_name"] == display_name for p in participants):
+        return None
+    for key in ("room_code", "room_id", "display_name", "is_host"):
+        session.pop(key, None)
+    flash("The host removed you from this room.", "error")
+    return redirect(url_for("join_room_page"))
 
 
 # ---------------------------------------------------------------------------
@@ -267,8 +282,9 @@ def join_room_submit():
             "join_room.html", prefill_code=room_code, form_data=request.form
         ), 400
 
-    # Private room: don't add them yet. File a request and wait for the host.
-    if room.get("is_private"):
+    # Private room, or someone the host removed: don't add them yet. File a
+    # request and wait for the host.
+    if needs_approval(room, display_name):
         try:
             create_request(room["id"], display_name)
         except ValueError as e:
@@ -387,18 +403,27 @@ def lobby(code: str):
         flash("That room doesn't exist.", "error")
         return redirect(url_for("home"))
 
+    display_name, is_host = _require_session(code)
+    if display_name is None:
+        # Not signed in: send started rooms on as before (that page will
+        # bounce to Join), otherwise go straight to Join.
+        if room["phase"] != "lobby":
+            return redirect(url_for("suggestions_page", code=code))
+        return redirect(url_for("join_room_page", code=code))
+
+    participants = get_participants(room["id"])
+    removed = _removed_redirect(code, participants, display_name)
+    if removed:
+        return removed
+
     # Skip lobby if room already started
     if room["phase"] != "lobby":
         return redirect(url_for("suggestions_page", code=code))
 
-    display_name, is_host = _require_session(code)
-    if display_name is None:
-        return redirect(url_for("join_room_page", code=code))
-
-    participants = get_participants(room["id"])
     my_participant = next(
-        (p for p in participants if p["display_name"] == display_name), {}
+        p for p in participants if p["display_name"] == display_name
     )
+
     return render_template(
         "lobby.html",
         room=room,
@@ -410,6 +435,31 @@ def lobby(code: str):
             room.get("voting_method", "borda"), "Borda Count"
         ),
     )
+
+
+@app.route("/room/<code>/participants/remove", methods=["POST"])
+def remove_participant_route(code: str):
+    """Host only, lobby only: remove one person. JSON {name}."""
+    room = get_room_by_code(code)
+    if not room:
+        return jsonify({"ok": False, "error": "Room not found."}), 404
+    if not session.get("is_host") or session.get("room_code") != room["room_code"]:
+        return jsonify({"ok": False, "error": "Only the host can do this."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    name    = str(payload.get("name", "")).strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Invalid request."}), 400
+
+    try:
+        remove_participant(room["id"], name)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 409
+    except DB_ERRORS:
+        app.logger.exception("Removing participant failed")
+        return jsonify({"ok": False, "error": "Couldn't remove them. Try again."}), 500
+
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +512,11 @@ def suggestions_page(code: str):
     if room["phase"] == "results":
         return redirect(url_for("results_page", code=code))
 
+    participants = get_participants(room["id"])
+    removed = _removed_redirect(code, participants, display_name)
+    if removed:
+        return removed
+
     my_suggestions  = get_suggestions_by_participant(room["id"], display_name)
     all_suggestions = get_suggestions(room["id"])
     slots_used      = len(my_suggestions)
@@ -471,7 +526,6 @@ def suggestions_page(code: str):
     else:
         slots_remaining = max(0, slots_total - slots_used)
 
-    participants = get_participants(room["id"])
     done_participants = get_done_participants(room["id"])
     suggestions_done = display_name in done_participants
     return render_template(
@@ -650,8 +704,12 @@ def voting_page(code: str):
     if room["phase"] == "results":
         return redirect(url_for("results_page", code=code))
 
-    suggestions     = get_suggestions(room["id"])
     participants    = get_participants(room["id"])
+    removed = _removed_redirect(code, participants, display_name)
+    if removed:
+        return removed
+
+    suggestions     = get_suggestions(room["id"])
     voters          = get_voters(room["id"])
     my_vote         = get_vote_by_participant(room["id"], display_name)
     has_voted       = len(my_vote) > 0
@@ -1063,11 +1121,11 @@ def api_participants(code: str):
             except (ValueError, RuntimeError):
                 pass
 
-    # Pending join requests: only the host of a private room, only in the lobby.
+    # Pending join requests: only the host, only in the lobby. Public rooms
+    # can have them too, from people the host removed asking to come back.
     join_requests = []
     if (
         current_phase == "lobby"
-        and room.get("is_private")
         and session.get("is_host")
         and session.get("room_code") == room["room_code"]
     ):

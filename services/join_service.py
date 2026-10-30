@@ -28,6 +28,27 @@ def create_request(room_id: str, display_name: str) -> None:
     ).execute()
 
 
+def needs_approval(room: dict, display_name: str) -> bool:
+    """
+    True if joining this room under this name needs the host's approval:
+    every private room, and a public room the person was removed from.
+
+    In a public room a join_requests row only exists because the host removed
+    someone under that name, so any row (any status, any capitalisation)
+    counts.
+    """
+    if room.get("is_private"):
+        return True
+    name = display_name.strip().lower()
+    resp = (
+        supabase.table("join_requests")
+        .select("display_name")
+        .eq("room_id", room["id"])
+        .execute()
+    )
+    return any((r["display_name"] or "").lower() == name for r in (resp.data or []))
+
+
 def get_pending_requests(room_id: str) -> list[dict]:
     """Return pending requests for a room, oldest first."""
     resp = (

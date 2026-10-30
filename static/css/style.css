@@ -924,6 +924,21 @@ input[type="checkbox"] {
   flex:        1;
 }
 
+/* Host's remove (×) button in the lobby: no box, just the glyph */
+.participant-remove {
+  background:  none;
+  border:      none;
+  padding:     0 0.25rem;
+  margin:      0;
+  font-size:   1.25rem;
+  line-height: 1;
+  color:       var(--text-faint);
+  cursor:      pointer;
+  flex-shrink: 0;
+}
+.participant-remove:hover,
+.participant-remove:focus-visible { color: var(--text); }
+
 .host-tag {
   font-size:      0.63rem;
   font-weight:    700;

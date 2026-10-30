@@ -227,6 +227,51 @@ def add_participant(room_id: str, display_name: str) -> dict:
     return participant_resp.data[0]
 
 
+def remove_participant(room_id: str, display_name: str) -> None:
+    """
+    Remove a participant from a room that is still in the lobby phase.
+
+    The host can't be removed. Their name is recorded in join_requests as
+    'denied', which means they have to ask the host to get back in, even in
+    a public room (see join_service.needs_approval).
+
+    Raises:
+        ValueError: If the room has started, the person is the host, or they
+                    aren't in the room.
+    """
+    room_resp = (
+        supabase.table("rooms")
+        .select("phase, host_name")
+        .eq("id", room_id)
+        .execute()
+    )
+    if not room_resp.data:
+        raise ValueError("Room not found.")
+
+    room = room_resp.data[0]
+    if room["phase"] != "lobby":
+        raise ValueError("You can only remove people before suggestions start.")
+    if display_name == room["host_name"]:
+        raise ValueError("The host can't be removed.")
+
+    resp = (
+        supabase.table("participants")
+        .delete()
+        .eq("room_id", room_id)
+        .eq("display_name", display_name)
+        .execute()
+    )
+    if not resp.data:
+        raise ValueError("That person isn't in this room.")
+
+    # Remember the removal so rejoining needs the host's approval.
+    # (join_requests comes from migration 004.)
+    supabase.table("join_requests").upsert(
+        {"room_id": room_id, "display_name": display_name, "status": "denied"},
+        on_conflict="room_id,display_name",
+    ).execute()
+
+
 def get_participants(room_id: str) -> list[dict]:
     """Get all participants in a room, ordered by join time."""
     resp = (

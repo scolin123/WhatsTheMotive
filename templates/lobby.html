@@ -6,7 +6,8 @@
   {
     "roomCode": {{ room.room_code | tojson }},
     "hostName": {{ room.host_name | tojson }},
-    "displayName": {{ display_name | tojson }}
+    "displayName": {{ display_name | tojson }},
+    "isHost": {{ is_host | tojson }}
   }
 </script>
 
@@ -39,6 +40,20 @@
     </button>
   </div>
 </div>
+
+{% if is_host %}
+<div id="remove-confirm-overlay" class="confirm-overlay" hidden>
+  <div class="confirm-dialog" role="dialog" aria-modal="true">
+    <p class="confirm-dialog__message">
+      Are you sure you want to remove <strong id="remove-confirm-name"></strong> from the room?
+    </p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost" id="remove-cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="remove-confirm">Remove</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <section class="page page--lobby">
   <div class="container">
@@ -140,21 +155,32 @@
                 </span>
               {% endif %}
               <span class="participant-name">{{ participant.display_name }}</span>
+              {% if is_host and participant.display_name != room.host_name %}
+                <button type="button" class="participant-remove"
+                        data-name="{{ participant.display_name }}"
+                        aria-label="Remove {{ participant.display_name }}">&times;</button>
+              {% endif %}
             </li>
           {% else %}
             <li class="participant-empty">No one has joined yet.</li>
           {% endfor %}
         </ul>
 
-        {% if is_host and room.is_private %}
-        {# Second section (below a divider): people waiting for the host to accept. #}
-        <div id="requests-panel" style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border, #e3e7ea);">
+        {% if is_host %}
+        {# Second section (below a divider): people waiting for the host to accept.
+           Public rooms only show it when a removed person asks to come back. #}
+        <div id="requests-panel" data-always-show="{{ 'true' if room.is_private else 'false' }}"
+             {% if not room.is_private %}hidden{% endif %}
+             style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border, #e3e7ea);">
           <h2 class="panel-title">Waiting to join</h2>
           <ul id="requests-list" class="participants-list">
             <li class="participant-empty">No one is waiting.</li>
           </ul>
           <p class="form__hint" id="requests-error" role="status" aria-live="polite"></p>
         </div>
+        {% endif %}
+        {% if is_host %}
+        <p class="form__hint" id="remove-error" role="status" aria-live="polite"></p>
         {% endif %}
       </div>
     </div>
@@ -196,6 +222,7 @@
   const ROOM_CODE   = PAGE_DATA.roomCode;
   const HOST_NAME   = PAGE_DATA.hostName;
   const DISPLAY_NAME = PAGE_DATA.displayName;
+  const IS_HOST     = PAGE_DATA.isHost;
   const POLL_MS     = 3000;
 
   let selectedAvatar = null;
@@ -266,8 +293,9 @@
   function renderJoinRequests(requests) {
     const panel = document.getElementById('requests-panel');
     const list  = document.getElementById('requests-list');
-    if (!panel || !list) return;           // not the host of a private room
+    if (!panel || !list) return;           // not the host
     requests = Array.isArray(requests) ? requests : [];
+    panel.hidden = requests.length === 0 && panel.dataset.alwaysShow !== 'true';
     if (requests.length === 0) {
       list.innerHTML = '<li class="participant-empty">No one is waiting.</li>';
       return;
@@ -330,6 +358,13 @@
       return;
     }
 
+    // The host removed this person: send them home.
+    if (!data.participants.some(p => p.display_name === DISPLAY_NAME)) {
+      clearInterval(pollInterval);
+      window.location.href = `/room/${ROOM_CODE}/lobby`;
+      return;
+    }
+
     if (data.phase && data.phase !== 'lobby') {
       window.location.href = `/room/${ROOM_CODE}/suggestions`;
       return;
@@ -355,12 +390,63 @@
       const avatarHtml = avatar
         ? `<img src="/static/images/${avatar}" alt="${name}" class="participant-avatar participant-avatar--img">`
         : `<span class="participant-avatar">${escapeHtml(rawName.charAt(0).toUpperCase())}</span>`;
+      const removeHtml = (IS_HOST && rawName !== HOST_NAME)
+        ? `<button type="button" class="participant-remove" data-name="${name}" aria-label="Remove ${name}">&times;</button>`
+        : '';
       return `
         <li class="participant-item">
           ${avatarHtml}
           <span class="participant-name">${name}</span>
+          ${removeHtml}
         </li>`;
     }).join('');
+  }
+
+  // ── Remove participant (host only) ───────────────────────────────
+  const removeOverlay = document.getElementById('remove-confirm-overlay');
+  let pendingRemoval = null;
+
+  function closeRemoveDialog() {
+    pendingRemoval = null;
+    if (removeOverlay) removeOverlay.setAttribute('hidden', '');
+  }
+
+  if (IS_HOST && removeOverlay) {
+    document.getElementById('participants-list').addEventListener('click', (e) => {
+      const btn = e.target.closest('.participant-remove');
+      if (!btn) return;
+      pendingRemoval = btn.dataset.name;
+      document.getElementById('remove-confirm-name').textContent = pendingRemoval;
+      removeOverlay.removeAttribute('hidden');
+      document.getElementById('remove-cancel').focus();
+    });
+
+    document.getElementById('remove-cancel').addEventListener('click', closeRemoveDialog);
+    removeOverlay.addEventListener('click', (e) => {
+      if (e.target === removeOverlay) closeRemoveDialog();
+    });
+    removeOverlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeRemoveDialog();
+    });
+
+    document.getElementById('remove-confirm').addEventListener('click', async () => {
+      const name  = pendingRemoval;
+      const errEl = document.getElementById('remove-error');
+      closeRemoveDialog();
+      if (!name) return;
+      try {
+        const resp = await fetch(`/room/${ROOM_CODE}/participants/remove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (errEl) errEl.textContent = resp.ok ? '' : (result.error || 'Couldn’t remove them.');
+      } catch (err) {
+        if (errEl) errEl.textContent = 'Couldn’t reach the server. Try again.';
+      }
+      refreshParticipants();
+    });
   }
 
   var pollInterval = setInterval(refreshParticipants, POLL_MS);
